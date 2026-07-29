@@ -22,10 +22,15 @@ import com.cartisan.core.exception.CodeMessage;
  */
 public enum AppRegistryMessage implements CodeMessage {
 
-    /**
-     * 占位错误码——骨架阶段占位；首个真实错误码随 #3 落入后移除。
-     */
-    PLACEHOLDER(500, "AR_PLACEHOLDER", "AppRegistry placeholder error"),
+    // ===== App（RegisteredApp 聚合，#3）=====
+    /** app_code 格式不正确（{0}=输入值）。*/
+    APP_CODE_INVALID(400, "AR_APP_CODE_INVALID", "应用编码格式不正确: {0}"),
+    /** 应用名为空。*/
+    APP_NAME_REQUIRED(400, "AR_APP_NAME_REQUIRED", "应用名称不能为空"),
+    /** 应用已禁用，无法再次禁用（{0}=appCode）。*/
+    APP_ALREADY_DISABLED(409, "AR_APP_ALREADY_DISABLED", "应用已处于禁用状态: {0}"),
+    /** 应用已启用，无法再次启用（{0}=appCode）。*/
+    APP_ALREADY_ENABLED(409, "AR_APP_ALREADY_ENABLED", "应用已处于启用状态: {0}"),
 
     ;
 
