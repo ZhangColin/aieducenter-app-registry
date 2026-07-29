@@ -8,7 +8,7 @@ spring:
     active: ${SPRING_PROFILES_ACTIVE:local}
   flyway:
     enabled: true
-    table: aieducenter-openapi_flyway_schema_history
+    table: aieducenter_app_registry_flyway_schema_history
     baseline-on-migrate: true
     baseline-version: "0"
     locations: classpath:db/migration
@@ -19,14 +19,14 @@ spring:
       ddl-auto: none
     show-sql: false
 
-# OpenAPI 签名配置
+# cartisan-openapi 签名配置
+# app-registry 是签名 facet 的「登记处 + 数据源」，自身：
+#   1) 用 LocalApiKeyProvider 直读表（见 #4），不配置 apikey-service-url、不自调 HTTP；
+#   2) 不作为签名客户端出站调他方服务，故 cartisan.openapi.self.* 留空（默认）。
+# SignatureVerificationFilter 仍注册（对无 X-App-Id 的请求直接放行），无害。
 cartisan:
   openapi:
-    sign:
-      enabled: true
-      app-id: ${OPENAPI_APP_ID:}
-      app-secret: ${OPENAPI_APP_SECRET:}
-      apikey-service-url: https://openapi.aieducenter.com/api/v1/api-keys/by-appId
+    apikey-service-url:
 
 management:
   endpoints:

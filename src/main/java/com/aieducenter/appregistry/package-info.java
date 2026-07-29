@@ -1,26 +1,31 @@
 /**
- * OpenAPI Context。
+ * AppRegistry Context。
  *
  * <h3>职责</h3>
  * <ul>
- *   <li>API Key 生命周期管理（创建、启用、禁用、查询）</li>
- *   <li>服务间签名验证的 API Key Provider</li>
+ *   <li>平台「应用 / 消费方」的单一登记处（基础能力层）</li>
+ *   <li>一个应用一行（{@code RegisteredApp} 治理锚点），持两个独立、可空的 facet：
+ *       签名 facet（{@code apiKey}/{@code apiSecret}）与 SSO facet（OIDC client 元数据）</li>
+ *   <li>为 {@code cartisan-openapi} 提供机机验签所需的 {@code ApiKeyProvider}（Local，直读表）</li>
+ *   <li>为 identity（IdP）提供 SSO client 元数据</li>
  * </ul>
  *
  * <h3>限界上下文</h3>
- * <p>管理服务间通信的 API Key，为其他服务提供签名验证所需的密钥信息</p>
+ * <p>由 {@code aieducenter-openapi} 升级而来（identity SSO 驱动）。
+ * 设计权威见 {@code CONTEXT.md} 与 {@code docs/adr/0001-0003}；
+ * 架构权威在兄弟仓库 {@code ../aieducenter-architecture/}。</p>
  *
  * <h3>包结构</h3>
  * <ul>
- *   <li>domain - 领域层：聚合根（ApiKey）、仓储接口、枚举、错误定义</li>
- *   <li>application - 应用层：应用服务、DTO、Mapper</li>
- *   <li>infrastructure - 基础设施层：ApiKeyProvider 适配器实现</li>
- *   <li>endpoints - 北向接口适配器层：REST API</li>
+ *   <li>domain - 领域层：聚合根（RegisteredApp / ApiKey / SsoClient）、仓储接口、枚举、端口接口、错误定义</li>
+ *   <li>application - 应用层：应用服务（{@code *AppService}）、DTO、Mapper</li>
+ *   <li>infrastructure - 基础设施层：AES / argon2 / 凭证生成等南向端口适配器、{@code LocalApiKeyProvider}</li>
+ *   <li>endpoints - 北向接口适配器层：REST API（admin 管理 + bootstrap 数据提供端点）</li>
  * </ul>
  *
  * @since 0.1.0
  */
-@BoundedContext(name = "OpenApi", subDomain = SubDomain.GENERIC)
+@BoundedContext(name = "AppRegistry", subDomain = SubDomain.GENERIC)
 package com.aieducenter.appregistry;
 
 import com.cartisan.core.stereotype.BoundedContext;

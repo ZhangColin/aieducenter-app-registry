@@ -1,0 +1,31 @@
+# 测试 profile：在 aieducenter 库内用专用 schema `app_registry_test` 做隔离
+# （aiedu 无 CREATEDB 权限，但拥有 aieducenter 库、可建 schema）。
+# `currentSchema=app_registry_test` 让 Hibernate 生成 SQL 与原生撞名查询都走同一 search_path。
+# e2e 测试（@SpringBootTest + MockMvc）依赖此 profile + 真实 PostgreSQL。
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/aieducenter?currentSchema=app_registry_test}
+    username: ${TEST_DB_USER:aiedu}
+    password: ${TEST_DB_PASSWORD:dev123}
+    driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: ${TEST_REDIS_HOST:localhost}
+      port: ${TEST_REDIS_PORT:6379}
+  flyway:
+    enabled: true
+    schemas: app_registry_test
+    table: aieducenter_app_registry_flyway_schema_history
+    baseline-on-migrate: true
+    baseline-version: "0"
+    locations: classpath:db/migration
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    open-in-view: false
+
+logging:
+  level:
+    root: WARN
+    com.aieducenter: DEBUG
