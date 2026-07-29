@@ -87,6 +87,14 @@
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-crypto</artifactId>
         </dependency>
+        <!-- SSO facet：client_secret argon2 仅哈希用的 BouncyCastle（spring-security-crypto 将其声明为可选，
+             spring-boot-dependencies 3.4 不管理其版本，故显式钉 1.78.1，匹配 spring-security 6.4.x）。
+             Argon2PasswordEncoder 纯 Java 实现（无原生库），适合容器化部署与测试。 -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>1.78.1</version>
+        </dependency>
 
         <!-- Utilities -->
         <dependency>

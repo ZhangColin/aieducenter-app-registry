@@ -38,6 +38,14 @@ public enum AppRegistryMessage implements CodeMessage {
     /** 签名凭证已启用，无法再次启用。*/
     API_KEY_ALREADY_ENABLED(409, "AR_API_KEY_ALREADY_ENABLED", "签名凭证已处于启用状态"),
 
+    // ===== SsoClient（SSO facet 聚合，#5）=====
+    /** SSO 回调地址为空（至少一个 redirect_uri）。*/
+    SSO_REDIRECT_URI_REQUIRED(400, "AR_SSO_REDIRECT_URI_REQUIRED", "回调地址不能为空"),
+    /** SSO 凭证已禁用，无法再次禁用。*/
+    SSO_CLIENT_ALREADY_DISABLED(409, "AR_SSO_CLIENT_ALREADY_DISABLED", "SSO 凭证已处于禁用状态"),
+    /** SSO 凭证已启用，无法再次启用。*/
+    SSO_CLIENT_ALREADY_ENABLED(409, "AR_SSO_CLIENT_ALREADY_ENABLED", "SSO 凭证已处于启用状态"),
+
     ;
 
     private final int httpStatus;
