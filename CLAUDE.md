@@ -22,6 +22,33 @@ Service 服务，基于 cartisan-boot 框架。
 - 打包：`mvn package -DskipTests`
 - 变异测试：`mvn org.pitest:pitest-maven:mutationCoverage`
 
-## 开发流程
+## Agent skills
 
-严格按 Superpowers 技能流程执行：brainstorming → writing-plans → TDD → verification
+### Issue tracker
+
+Issues and PRDs live as GitHub issues (via the `gh` CLI). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical triage roles, label string equal to role name: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## 平台架构上下文
+本服务（app-registry）是平台「应用/消费方」单一登记处（基础能力层）。原 aieducenter-openapi，
+因 identity SSO 需要登记「哪些应用能走 SSO」而升级。完整架构与决策在兄弟仓库
+../aieducenter-architecture/（起步包 docs/starters/app-registry.md）。
+
+稳定不变式（务必遵守）：
+- 一个应用一行，持多 facet：签名 facet（apiKey/apiSecret，供 cartisan-openapi 机机验签）+ SSO facet（client_id/client_secret/redirect_uri/scopes/grants，供 IdP OIDC）。两 facet 独立、可空。
+- cartisan-openapi 框架的 ApiKeyInfo/ApiKeyProvider 只服务签名 facet——绝不把 OIDC 字段塞进去。SSO facet 走独立端点、identity 直接消费。
+- 两类 secret 存储相反：签名 apiSecret 必须可取回（加密存 + 传输加固，消费方要明文验 HMAC）；SSO client_secret 必须 hash-only（像密码，永不返回）。
+- /by-appId 只返签名 facet；不返 SSO 字段。
+- bootstrap 端点（/by-appId、SSO 端点）无验签，必须 mTLS/内网/token/IP 加固。
+- 本服务不做 OIDC token 签发/登录流（identity 做）；只持 SSO client 元数据。
+
+深度（签名机制、callerAppId 来源、为什么两 facet 两存储、术语、决策）：
+读架构仓库 app-registry.md、architecture.md §4/§6.1、CONTEXT.md、map.md。
+本项目自己的设计演进 → 本项目的 CONTEXT.md + docs/adr/。
