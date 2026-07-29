@@ -32,6 +32,12 @@ public enum AppRegistryMessage implements CodeMessage {
     /** 应用已启用，无法再次启用（{0}=appCode）。*/
     APP_ALREADY_ENABLED(409, "AR_APP_ALREADY_ENABLED", "应用已处于启用状态: {0}"),
 
+    // ===== ApiKey（签名 facet 聚合，#4）=====
+    /** 签名凭证已禁用，无法再次禁用。*/
+    API_KEY_ALREADY_DISABLED(409, "AR_API_KEY_ALREADY_DISABLED", "签名凭证已处于禁用状态"),
+    /** 签名凭证已启用，无法再次启用。*/
+    API_KEY_ALREADY_ENABLED(409, "AR_API_KEY_ALREADY_ENABLED", "签名凭证已处于启用状态"),
+
     ;
 
     private final int httpStatus;
