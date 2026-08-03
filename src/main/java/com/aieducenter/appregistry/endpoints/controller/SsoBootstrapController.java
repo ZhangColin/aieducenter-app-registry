@@ -4,6 +4,7 @@ import com.aieducenter.appregistry.application.SsoClientAppService;
 import com.aieducenter.appregistry.application.dto.response.SsoClientInfo;
 import com.cartisan.core.exception.BaseCodeMessage;
 import com.cartisan.core.exception.DomainException;
+import com.cartisan.openapi.annotation.RequireSignature;
 import com.cartisan.web.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * SSO facet <strong>bootstrap 端点</strong>——无验签的源端点，供 identity（IdP）拉取 client 元数据。
+ * SSO facet <strong>bootstrap 端点</strong>——需验签（identity 作为平台核心服务可预先持有签名凭证，无死锁）。
  *
  * <p>{@code GET /api/app-registry/sso-clients/{clientId}} 返 {@link SsoClientInfo}：active 时含
  * {@code client_secret} 的 <strong>hash</strong>（不含明文，hash-only 不变式）；app/client 任一禁用 →
@@ -28,7 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/app-registry/sso-clients")
-@Tag(name = "Bootstrap", description = "SSO facet bootstrap 端点（内部，无验签）")
+@RequireSignature
+@Tag(name = "Bootstrap", description = "SSO facet bootstrap 端点（需验签）")
 public class SsoBootstrapController {
 
     private final SsoClientAppService ssoClientAppService;

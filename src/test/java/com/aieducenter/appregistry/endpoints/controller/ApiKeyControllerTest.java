@@ -2,11 +2,13 @@ package com.aieducenter.appregistry.endpoints.controller;
 
 import com.aieducenter.appregistry.application.PlatformSeedAppService;
 import com.aieducenter.appregistry.application.dto.command.CreateAppCommand;
+import com.aieducenter.appregistry.common.TestSignatureHelper;
 import com.aieducenter.appregistry.domain.signature.port.ApiSecretEncrypter;
 import com.cartisan.test.base.ApiTestAssertions;
 import com.cartisan.test.base.ApiTestBase;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -39,6 +41,8 @@ class ApiKeyControllerTest extends ApiTestBase {
     private final ApiSecretEncrypter encrypter;
     private final PlatformSeedAppService seedService;
 
+    private TestSignatureHelper signer;
+
     ApiKeyControllerTest(ObjectMapper objectMapper, JdbcTemplate jdbcTemplate,
                          ApiSecretEncrypter encrypter, PlatformSeedAppService seedService) {
         this.objectMapper = objectMapper;
@@ -47,11 +51,16 @@ class ApiKeyControllerTest extends ApiTestBase {
         this.seedService = seedService;
     }
 
+    @BeforeEach
+    void setUpCaller() {
+        signer = TestSignatureHelper.setupCaller(jdbcTemplate, encrypter);
+    }
+
     @Test
     void givenAppWithoutFacet_whenCreate_thenReturnsPlaintextOnceAndStoresCiphertext() throws Exception {
         long appId = createApp("payment-service");
 
-        String body = mvc.perform(post("/api/app-registry/apps/{appId}/api-keys", appId))
+        String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/api-keys", appId), null))
                 .andExpect(status().isOk())
                 .andExpect(ApiTestAssertions.assertOk())
                 .andExpect(jsonPath("$.data.appId").value(appId))
@@ -80,7 +89,7 @@ class ApiKeyControllerTest extends ApiTestBase {
         long appId = createApp("payment-service");
         String apiKey = createKey(appId);
 
-        mvc.perform(get("/api/app-registry/apps/{appId}/api-keys", appId))
+        mvc.perform(signer.sign(get("/api/app-registry/apps/{appId}/api-keys", appId), null))
                 .andExpect(status().isOk())
                 .andExpect(ApiTestAssertions.assertOk())
                 .andExpect(jsonPath("$.data.apiKey").value(apiKey))
@@ -89,53 +98,48 @@ class ApiKeyControllerTest extends ApiTestBase {
     }
 
     @Test
-    void givenActiveKey_whenBootstrap_thenReturnsPlaintextAndActive() throws Exception {
+    void givenActiveKey_whenBootstrap_thenReturnsPlaintext() throws Exception {
         long appId = createApp("payment-service");
         String[] created = createKeyWithSecret(appId);
         String apiKey = created[0];
         String plaintext = created[1];
 
+        // bootstrap 端点有 @NoSignature，无需签名
         mvc.perform(get("/api/app-registry/api-keys/{apiKey}", apiKey))
                 .andExpect(status().isOk())
                 .andExpect(ApiTestAssertions.assertOk())
-                .andExpect(jsonPath("$.data.appId").value(apiKey))
+                .andExpect(jsonPath("$.data.apiKey").value(apiKey))
                 .andExpect(jsonPath("$.data.appName").value("n"))
-                .andExpect(jsonPath("$.data.apiSecret").value(plaintext))
-                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+                .andExpect(jsonPath("$.data.apiSecret").value(plaintext));
     }
 
     @Test
-    void givenAppDisabled_whenBootstrap_thenStatusDisabledCascade() throws Exception {
+    void givenAppOrFacetDisabled_whenBootstrap_then404() throws Exception {
         long appId = createApp("payment-service");
         String apiKey = createKey(appId);
 
-        // 禁用 app → facet 组合状态应级联为 DISABLED
-        mvc.perform(put("/api/app-registry/apps/{appId}/disable", appId))
-                .andExpect(status().isOk());
-
-        mvc.perform(get("/api/app-registry/api-keys/{apiKey}", apiKey))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("DISABLED"));
-
-        // 重新启用 app → 恢复 ACTIVE
-        mvc.perform(put("/api/app-registry/apps/{appId}/enable", appId))
-                .andExpect(status().isOk());
-
-        mvc.perform(get("/api/app-registry/api-keys/{apiKey}", apiKey))
-                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
-    }
-
-    @Test
-    void givenFacetDisabled_whenBootstrap_thenStatusDisabled() throws Exception {
-        long appId = createApp("payment-service");
-        String apiKey = createKey(appId);
-
-        mvc.perform(put("/api/app-registry/apps/{appId}/api-keys/disable", appId))
+        // 禁用 facet → bootstrap 返回 404（框架视为不可用）
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{appId}/api-keys/disable", appId), null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value(0));
 
+        // bootstrap 端点有 @NoSignature，无需签名
         mvc.perform(get("/api/app-registry/api-keys/{apiKey}", apiKey))
-                .andExpect(jsonPath("$.data.status").value("DISABLED"));
+                .andExpect(status().isNotFound());
+
+        // 重新启用 facet → 恢复可查
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{appId}/api-keys/enable", appId), null))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/app-registry/api-keys/{apiKey}", apiKey))
+                .andExpect(status().isOk());
+
+        // 禁用 app → bootstrap 404（级联）
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{appId}/disable", appId), null))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/app-registry/api-keys/{apiKey}", apiKey))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -145,7 +149,7 @@ class ApiKeyControllerTest extends ApiTestBase {
                 "SELECT id FROM ar_registered_apps WHERE app_code = 'admin-console' AND deleted = false",
                 Long.class);
 
-        mvc.perform(put("/api/app-registry/apps/{appId}/api-keys/disable", appId))
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{appId}/api-keys/disable", appId), null))
                 .andExpect(status().isForbidden())
                 .andExpect(ApiTestAssertions.assertError(403));
     }
@@ -157,7 +161,7 @@ class ApiKeyControllerTest extends ApiTestBase {
         String oldApiKey = first[0];
         String oldPlaintext = first[1];
 
-        String body = mvc.perform(post("/api/app-registry/apps/{appId}/api-keys", appId))
+        String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/api-keys", appId), null))
                 .andExpect(status().isOk())
                 .andExpect(ApiTestAssertions.assertOk())
                 .andReturn().getResponse().getContentAsString();
@@ -169,7 +173,7 @@ class ApiKeyControllerTest extends ApiTestBase {
         assertThat(newApiKey).isEqualTo(oldApiKey);
         assertThat(newPlaintext).isNotEqualTo(oldPlaintext);
 
-        // apiKey 不变 → 仍可按原 apiKey 查询，返回新 secret
+        // apiKey 不变 → 仍可按原 apiKey 查询，返回新 secret（bootstrap 无需签名）
         mvc.perform(get("/api/app-registry/api-keys/{apiKey}", oldApiKey))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.apiSecret").value(newPlaintext));
@@ -177,7 +181,7 @@ class ApiKeyControllerTest extends ApiTestBase {
 
     @Test
     void givenMissingApp_whenCreate_then404() throws Exception {
-        mvc.perform(post("/api/app-registry/apps/{appId}/api-keys", 77777777777L))
+        mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/api-keys", 77777777777L), null))
                 .andExpect(status().isNotFound())
                 .andExpect(ApiTestAssertions.assertError(404));
     }
@@ -186,17 +190,18 @@ class ApiKeyControllerTest extends ApiTestBase {
     void givenSeed_whenBootstrapAdminConsole_thenReturnsValidCredentials() throws Exception {
         seedService.seed();
 
+        // bootstrap 端点有 @NoSignature，无需签名
         mvc.perform(get("/api/app-registry/api-keys/{apiKey}", "admin-console"))
                 .andExpect(status().isOk())
                 .andExpect(ApiTestAssertions.assertOk())
-                .andExpect(jsonPath("$.data.appId").value("admin-console"))
+                .andExpect(jsonPath("$.data.apiKey").value("admin-console"))
                 .andExpect(jsonPath("$.data.appName").value("管理后台"))
-                .andExpect(jsonPath("$.data.apiSecret").isString())
-                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+                .andExpect(jsonPath("$.data.apiSecret").isString());
     }
 
     @Test
     void givenUnknownApiKey_whenBootstrap_then404() throws Exception {
+        // bootstrap 端点有 @NoSignature，无需签名
         mvc.perform(get("/api/app-registry/api-keys/{apiKey}", "nonexistent-key"))
                 .andExpect(status().isNotFound())
                 .andExpect(ApiTestAssertions.assertError(404));
@@ -205,9 +210,10 @@ class ApiKeyControllerTest extends ApiTestBase {
     // ---- helpers ----
 
     private long createApp(String appCode) throws Exception {
-        String body = mvc.perform(post("/api/app-registry/apps")
+        String json = ApiTestAssertions.toJson(new CreateAppCommand(appCode, "n", null));
+        String body = mvc.perform(signer.sign(post("/api/app-registry/apps")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(ApiTestAssertions.toJson(new CreateAppCommand(appCode, "n", null))))
+                        .content(json), json))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("data").path("id").asLong();
@@ -218,7 +224,7 @@ class ApiKeyControllerTest extends ApiTestBase {
     }
 
     private String[] createKeyWithSecret(long appId) throws Exception {
-        String body = mvc.perform(post("/api/app-registry/apps/{appId}/api-keys", appId))
+        String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/api-keys", appId), null))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         JsonNode data = objectMapper.readTree(body).path("data");

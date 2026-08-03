@@ -3,6 +3,7 @@ package com.aieducenter.appregistry.endpoints.controller;
 import com.aieducenter.appregistry.application.ApiKeyAppService;
 import com.aieducenter.appregistry.application.dto.response.ApiKeyCreatedResponse;
 import com.aieducenter.appregistry.application.dto.response.ApiKeyResponse;
+import com.cartisan.openapi.annotation.RequireSignature;
 import com.cartisan.web.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/app-registry/apps/{appId}/api-keys")
+@RequireSignature
 @Tag(name = "ApiKeys", description = "签名 facet 管理（机机验签凭证）")
 public class ApiKeyController {
 

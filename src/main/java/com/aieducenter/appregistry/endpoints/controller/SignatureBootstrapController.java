@@ -3,6 +3,7 @@ package com.aieducenter.appregistry.endpoints.controller;
 import com.aieducenter.appregistry.application.ApiKeyAppService;
 import com.cartisan.core.exception.BaseCodeMessage;
 import com.cartisan.core.exception.DomainException;
+import com.cartisan.openapi.annotation.NoSignature;
 import com.cartisan.openapi.provider.ApiKeyInfo;
 import com.cartisan.web.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p><strong>加固 = 网络隔离（只对内可达）</strong>：本端点无验签、无 bootstrap token / mTLS / IP allowlist——
  * app-registry 部署为只对内可达，网络边界即信任边界（ADR-0002 §9）。调用方全是可信的自有 provider 服务。</p>
  *
- * <p>组合状态级联：app 禁用或 facet 禁用 → 返 {@code status=DISABLED}（消费方拒签）。</p>
+ * <p>组合状态级联：app 禁用或 facet 禁用 → 返回 404（框架视为不可用）。</p>
  *
  * @since 0.1.0
  */
@@ -37,6 +38,7 @@ public class SignatureBootstrapController {
     }
 
     @GetMapping("/{apiKey}")
+    @NoSignature
     @Operation(summary = "按 apiKey 取签名 facet（bootstrap）", description = "返 ApiKeyInfo（含明文 apiSecret）；只返签名 facet")
     public ApiResponse<ApiKeyInfo> getByApiKey(@PathVariable String apiKey) {
         ApiKeyInfo info = apiKeyAppService.resolveApiKeyInfo(apiKey)

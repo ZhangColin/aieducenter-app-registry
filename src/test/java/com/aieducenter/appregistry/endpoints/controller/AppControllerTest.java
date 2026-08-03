@@ -1,10 +1,13 @@
 package com.aieducenter.appregistry.endpoints.controller;
 
 import com.aieducenter.appregistry.application.dto.command.CreateAppCommand;
+import com.aieducenter.appregistry.common.TestSignatureHelper;
+import com.aieducenter.appregistry.domain.signature.port.ApiSecretEncrypter;
 import com.cartisan.test.base.ApiTestAssertions;
 import com.cartisan.test.base.ApiTestBase;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -34,17 +37,28 @@ class AppControllerTest extends ApiTestBase {
 
     private final ObjectMapper objectMapper;
     private final JdbcTemplate jdbcTemplate;
+    private final ApiSecretEncrypter encrypter;
 
-    AppControllerTest(ObjectMapper objectMapper, JdbcTemplate jdbcTemplate) {
+    private TestSignatureHelper signer;
+
+    AppControllerTest(ObjectMapper objectMapper, JdbcTemplate jdbcTemplate,
+                      ApiSecretEncrypter encrypter) {
         this.objectMapper = objectMapper;
         this.jdbcTemplate = jdbcTemplate;
+        this.encrypter = encrypter;
+    }
+
+    @BeforeEach
+    void setUpCaller() {
+        signer = TestSignatureHelper.setupCaller(jdbcTemplate, encrypter);
     }
 
     @Test
     void givenValidCommand_whenCreate_thenCreatedAndPersisted() throws Exception {
-        String body = mvc.perform(post("/api/app-registry/apps")
+        String json = ApiTestAssertions.toJson(new CreateAppCommand("payment-service", "支付服务", "desc"));
+        String body = mvc.perform(signer.sign(post("/api/app-registry/apps")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(ApiTestAssertions.toJson(new CreateAppCommand("payment-service", "支付服务", "desc"))))
+                        .content(json), json))
                 .andExpect(status().isOk())
                 .andExpect(ApiTestAssertions.assertOk())
                 .andExpect(jsonPath("$.data.appCode").value("payment-service"))
@@ -67,7 +81,7 @@ class AppControllerTest extends ApiTestBase {
     void givenExistingApp_whenGetById_thenReturned() throws Exception {
         long id = createApp("payment-service");
 
-        mvc.perform(get("/api/app-registry/apps/{id}", id))
+        mvc.perform(signer.sign(get("/api/app-registry/apps/{id}", id), null))
                 .andExpect(status().isOk())
                 .andExpect(ApiTestAssertions.assertOk())
                 .andExpect(jsonPath("$.data.id").value(id))
@@ -78,9 +92,10 @@ class AppControllerTest extends ApiTestBase {
     void givenAppCodeTaken_whenCreate_then409() throws Exception {
         createApp("payment-service");
 
-        mvc.perform(post("/api/app-registry/apps")
+        String json = ApiTestAssertions.toJson(new CreateAppCommand("payment-service", "另一个", null));
+        mvc.perform(signer.sign(post("/api/app-registry/apps")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(ApiTestAssertions.toJson(new CreateAppCommand("payment-service", "另一个", null))))
+                        .content(json), json))
                 .andExpect(status().isConflict())
                 .andExpect(ApiTestAssertions.assertError(409));
     }
@@ -93,18 +108,20 @@ class AppControllerTest extends ApiTestBase {
                         "VALUES (?, ?, ?, ?, now(), now(), true)",
                 99001L, "ghost-app", "幽灵", 1);
 
-        mvc.perform(post("/api/app-registry/apps")
+        String json = ApiTestAssertions.toJson(new CreateAppCommand("ghost-app", "新幽灵", null));
+        mvc.perform(signer.sign(post("/api/app-registry/apps")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(ApiTestAssertions.toJson(new CreateAppCommand("ghost-app", "新幽灵", null))))
+                        .content(json), json))
                 .andExpect(status().isConflict())
                 .andExpect(ApiTestAssertions.assertError(409));
     }
 
     @Test
     void givenInvalidAppCode_whenCreate_then400() throws Exception {
-        mvc.perform(post("/api/app-registry/apps")
+        String json = ApiTestAssertions.toJson(new CreateAppCommand("Bad_Code!", "名", null));
+        mvc.perform(signer.sign(post("/api/app-registry/apps")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(ApiTestAssertions.toJson(new CreateAppCommand("Bad_Code!", "名", null))))
+                        .content(json), json))
                 .andExpect(status().isBadRequest())
                 .andExpect(ApiTestAssertions.assertError(400));
     }
@@ -113,13 +130,13 @@ class AppControllerTest extends ApiTestBase {
     void givenActiveApp_whenDisableThenEnable_thenStatusTogglesAndAppCodeUnchanged() throws Exception {
         long id = createApp("payment-service");
 
-        mvc.perform(put("/api/app-registry/apps/{id}/disable", id))
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{id}/disable", id), null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value(0))
                 .andExpect(jsonPath("$.data.statusName").value("禁用"))
                 .andExpect(jsonPath("$.data.appCode").value("payment-service"));
 
-        mvc.perform(put("/api/app-registry/apps/{id}/enable", id))
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{id}/enable", id), null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value(1))
                 .andExpect(jsonPath("$.data.appCode").value("payment-service"));
@@ -129,10 +146,10 @@ class AppControllerTest extends ApiTestBase {
     void givenDisabledApp_whenDisableAgain_then409() throws Exception {
         long id = createApp("payment-service");
 
-        mvc.perform(put("/api/app-registry/apps/{id}/disable", id))
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{id}/disable", id), null))
                 .andExpect(status().isOk());
 
-        mvc.perform(put("/api/app-registry/apps/{id}/disable", id))
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{id}/disable", id), null))
                 .andExpect(status().isConflict())
                 .andExpect(ApiTestAssertions.assertError(409));
     }
@@ -141,22 +158,30 @@ class AppControllerTest extends ApiTestBase {
     void givenAdminConsoleApp_whenDisable_then403() throws Exception {
         long id = createApp("admin-console");
 
-        mvc.perform(put("/api/app-registry/apps/{id}/disable", id))
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{id}/disable", id), null))
                 .andExpect(status().isForbidden())
                 .andExpect(ApiTestAssertions.assertError(403));
     }
 
     @Test
     void givenMissingApp_whenGet_then404() throws Exception {
-        mvc.perform(get("/api/app-registry/apps/{id}", 88888888888L))
+        mvc.perform(signer.sign(get("/api/app-registry/apps/{id}", 88888888888L), null))
                 .andExpect(status().isNotFound())
                 .andExpect(ApiTestAssertions.assertError(404));
     }
 
+    @Test
+    void givenNoSignature_whenCallRequireSignatureEndpoint_then401() throws Exception {
+        // 对 @RequireSignature 端点发无签名请求 → 拦截器返回 401
+        mvc.perform(get("/api/app-registry/apps/{id}", 1))
+                .andExpect(status().isUnauthorized());
+    }
+
     private long createApp(String appCode) throws Exception {
-        String body = mvc.perform(post("/api/app-registry/apps")
+        String json = ApiTestAssertions.toJson(new CreateAppCommand(appCode, "n", null));
+        String body = mvc.perform(signer.sign(post("/api/app-registry/apps")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(ApiTestAssertions.toJson(new CreateAppCommand(appCode, "n", null))))
+                        .content(json), json))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         JsonNode node = objectMapper.readTree(body);

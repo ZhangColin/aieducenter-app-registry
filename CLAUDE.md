@@ -46,7 +46,7 @@ Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agent
 - cartisan-openapi 框架的 ApiKeyInfo/ApiKeyProvider 只服务签名 facet——绝不把 OIDC 字段塞进去。SSO facet 走独立端点、identity 直接消费。
 - 两类 secret 存储相反：签名 apiSecret 必须可取回（加密存 + 传输加固，消费方要明文验 HMAC）；SSO client_secret 必须 hash-only（像密码，永不返回）。
 - /by-appId 只返签名 facet；不返 SSO 字段。
-- bootstrap 端点（/by-appId、SSO 端点）无验签，必须 mTLS/内网/token/IP 加固。
+- 签名 bootstrap 端点（`/api-keys/{apiKey}`）标 `@NoSignature` 跳过验签（死锁逃生舱），SSO bootstrap 端点（`/sso-clients/{clientId}`）标 `@RequireSignature` 强制验签（identity 预持凭证，无死锁）。所有 bootstrap 端点须 mTLS/内网/token/IP 加固。
 - 本服务不做 OIDC token 签发/登录流（identity 做）；只持 SSO client 元数据。
 
 深度（签名机制、callerAppId 来源、为什么两 facet 两存储、术语、决策）：

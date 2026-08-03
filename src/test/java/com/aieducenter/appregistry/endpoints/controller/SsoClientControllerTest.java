@@ -2,10 +2,13 @@ package com.aieducenter.appregistry.endpoints.controller;
 
 import com.aieducenter.appregistry.application.dto.command.CreateAppCommand;
 import com.aieducenter.appregistry.application.dto.command.CreateSsoClientCommand;
+import com.aieducenter.appregistry.common.TestSignatureHelper;
+import com.aieducenter.appregistry.domain.signature.port.ApiSecretEncrypter;
 import com.cartisan.test.base.ApiTestAssertions;
 import com.cartisan.test.base.ApiTestBase;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -50,19 +53,31 @@ class SsoClientControllerTest extends ApiTestBase {
 
     private final ObjectMapper objectMapper;
     private final JdbcTemplate jdbcTemplate;
+    private final ApiSecretEncrypter encrypter;
 
-    SsoClientControllerTest(ObjectMapper objectMapper, JdbcTemplate jdbcTemplate) {
+    private TestSignatureHelper signer;
+
+    SsoClientControllerTest(ObjectMapper objectMapper, JdbcTemplate jdbcTemplate,
+                            ApiSecretEncrypter encrypter) {
         this.objectMapper = objectMapper;
         this.jdbcTemplate = jdbcTemplate;
+        this.encrypter = encrypter;
+    }
+
+    @BeforeEach
+    void setUpCaller() {
+        signer = TestSignatureHelper.setupCaller(jdbcTemplate, encrypter);
     }
 
     @Test
     void givenAppWithoutFacet_whenCreate_thenReturnsPlaintextOnceAndStoresHash() throws Exception {
         long appId = createApp("sso-app");
 
-        String body = mvc.perform(post("/api/app-registry/apps/{appId}/sso-clients", appId)
+        CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, SCOPES, GRANTS);
+        String json = ApiTestAssertions.toJson(command);
+        String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(ApiTestAssertions.toJson(new CreateSsoClientCommand(REDIRECT_URIS, SCOPES, GRANTS))))
+                        .content(json), json))
                 .andExpect(status().isOk())
                 .andExpect(ApiTestAssertions.assertOk())
                 .andExpect(jsonPath("$.data.appId").value(appId))
@@ -102,7 +117,7 @@ class SsoClientControllerTest extends ApiTestBase {
         long appId = createApp("sso-app");
         String clientId = createClient(appId);
 
-        mvc.perform(get("/api/app-registry/apps/{appId}/sso-clients", appId))
+        mvc.perform(signer.sign(get("/api/app-registry/apps/{appId}/sso-clients", appId), null))
                 .andExpect(status().isOk())
                 .andExpect(ApiTestAssertions.assertOk())
                 .andExpect(jsonPath("$.data.clientId").value(clientId))
@@ -118,7 +133,8 @@ class SsoClientControllerTest extends ApiTestBase {
         String clientId = created[0];
         String plaintext = created[1];
 
-        String body = mvc.perform(get("/api/app-registry/sso-clients/{clientId}", clientId))
+        // SSO bootstrap 端点需要验签
+        String body = mvc.perform(signer.sign(get("/api/app-registry/sso-clients/{clientId}", clientId), null))
                 .andExpect(status().isOk())
                 .andExpect(ApiTestAssertions.assertOk())
                 .andExpect(jsonPath("$.data.clientId").value(clientId))
@@ -148,19 +164,19 @@ class SsoClientControllerTest extends ApiTestBase {
         String clientId = createClient(appId);
 
         // 禁用 app → 组合状态 active=false，hash 被扣留（不返有效元数据）
-        mvc.perform(put("/api/app-registry/apps/{appId}/disable", appId))
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{appId}/disable", appId), null))
                 .andExpect(status().isOk());
 
-        mvc.perform(get("/api/app-registry/sso-clients/{clientId}", clientId))
+        mvc.perform(signer.sign(get("/api/app-registry/sso-clients/{clientId}", clientId), null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.active").value(false))
                 .andExpect(jsonPath("$.data.clientSecretHash").doesNotExist());
 
         // 重新启用 app → 恢复 active=true，hash 回来
-        mvc.perform(put("/api/app-registry/apps/{appId}/enable", appId))
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{appId}/enable", appId), null))
                 .andExpect(status().isOk());
 
-        mvc.perform(get("/api/app-registry/sso-clients/{clientId}", clientId))
+        mvc.perform(signer.sign(get("/api/app-registry/sso-clients/{clientId}", clientId), null))
                 .andExpect(jsonPath("$.data.active").value(true))
                 .andExpect(jsonPath("$.data.clientSecretHash").isString());
     }
@@ -170,11 +186,11 @@ class SsoClientControllerTest extends ApiTestBase {
         long appId = createApp("sso-app");
         String clientId = createClient(appId);
 
-        mvc.perform(put("/api/app-registry/apps/{appId}/sso-clients/disable", appId))
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{appId}/sso-clients/disable", appId), null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value(0));
 
-        mvc.perform(get("/api/app-registry/sso-clients/{clientId}", clientId))
+        mvc.perform(signer.sign(get("/api/app-registry/sso-clients/{clientId}", clientId), null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.active").value(false))
                 .andExpect(jsonPath("$.data.clientSecretHash").doesNotExist());
@@ -188,9 +204,11 @@ class SsoClientControllerTest extends ApiTestBase {
         String oldPlaintext = first[1];
 
         List<String> newUris = List.of("https://new.example.com/cb");
-        String body = mvc.perform(post("/api/app-registry/apps/{appId}/sso-clients", appId)
+        CreateSsoClientCommand command = new CreateSsoClientCommand(newUris, Set.of("openid"), null);
+        String json = ApiTestAssertions.toJson(command);
+        String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(ApiTestAssertions.toJson(new CreateSsoClientCommand(newUris, Set.of("openid"), null))))
+                        .content(json), json))
                 .andExpect(status().isOk())
                 .andExpect(ApiTestAssertions.assertOk())
                 .andReturn().getResponse().getContentAsString();
@@ -204,11 +222,11 @@ class SsoClientControllerTest extends ApiTestBase {
         assertThat(data.path("grants").size()).isZero();
 
         // 旧 client_id 已轮换掉 → bootstrap 404
-        mvc.perform(get("/api/app-registry/sso-clients/{clientId}", oldClientId))
+        mvc.perform(signer.sign(get("/api/app-registry/sso-clients/{clientId}", oldClientId), null))
                 .andExpect(status().isNotFound());
 
         // 新 client_id 可用（active + hash 可比对新明文）
-        mvc.perform(get("/api/app-registry/sso-clients/{clientId}", newClientId))
+        mvc.perform(signer.sign(get("/api/app-registry/sso-clients/{clientId}", newClientId), null))
                 .andExpect(jsonPath("$.data.active").value(true));
     }
 
@@ -216,18 +234,22 @@ class SsoClientControllerTest extends ApiTestBase {
     void givenEmptyRedirectUris_whenCreate_then400() throws Exception {
         long appId = createApp("sso-app");
 
-        mvc.perform(post("/api/app-registry/apps/{appId}/sso-clients", appId)
+        CreateSsoClientCommand command = new CreateSsoClientCommand(List.of(), SCOPES, GRANTS);
+        String json = ApiTestAssertions.toJson(command);
+        mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(ApiTestAssertions.toJson(new CreateSsoClientCommand(List.of(), SCOPES, GRANTS))))
+                        .content(json), json))
                 .andExpect(status().isBadRequest())
                 .andExpect(ApiTestAssertions.assertError(400));
     }
 
     @Test
     void givenMissingApp_whenCreate_then404() throws Exception {
-        mvc.perform(post("/api/app-registry/apps/{appId}/sso-clients", 77777777777L)
+        CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, SCOPES, GRANTS);
+        String json = ApiTestAssertions.toJson(command);
+        mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", 77777777777L)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(ApiTestAssertions.toJson(new CreateSsoClientCommand(REDIRECT_URIS, SCOPES, GRANTS))))
+                        .content(json), json))
                 .andExpect(status().isNotFound())
                 .andExpect(ApiTestAssertions.assertError(404));
     }
@@ -236,14 +258,14 @@ class SsoClientControllerTest extends ApiTestBase {
     void givenAppWithoutFacet_whenGet_then404() throws Exception {
         long appId = createApp("sso-app");
 
-        mvc.perform(get("/api/app-registry/apps/{appId}/sso-clients", appId))
+        mvc.perform(signer.sign(get("/api/app-registry/apps/{appId}/sso-clients", appId), null))
                 .andExpect(status().isNotFound())
                 .andExpect(ApiTestAssertions.assertError(404));
     }
 
     @Test
     void givenUnknownClientId_whenBootstrap_then404() throws Exception {
-        mvc.perform(get("/api/app-registry/sso-clients/{clientId}", "nonexistent-client"))
+        mvc.perform(signer.sign(get("/api/app-registry/sso-clients/{clientId}", "nonexistent-client"), null))
                 .andExpect(status().isNotFound())
                 .andExpect(ApiTestAssertions.assertError(404));
     }
@@ -253,15 +275,15 @@ class SsoClientControllerTest extends ApiTestBase {
         long appId = createApp("sso-app");
         createClient(appId);
 
-        mvc.perform(put("/api/app-registry/apps/{appId}/sso-clients/disable", appId))
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{appId}/sso-clients/disable", appId), null))
                 .andExpect(status().isOk());
-        mvc.perform(put("/api/app-registry/apps/{appId}/sso-clients/disable", appId))
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{appId}/sso-clients/disable", appId), null))
                 .andExpect(status().isConflict())
                 .andExpect(ApiTestAssertions.assertError(409));
 
-        mvc.perform(put("/api/app-registry/apps/{appId}/sso-clients/enable", appId))
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{appId}/sso-clients/enable", appId), null))
                 .andExpect(status().isOk());
-        mvc.perform(put("/api/app-registry/apps/{appId}/sso-clients/enable", appId))
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{appId}/sso-clients/enable", appId), null))
                 .andExpect(status().isConflict())
                 .andExpect(ApiTestAssertions.assertError(409));
     }
@@ -302,9 +324,10 @@ class SsoClientControllerTest extends ApiTestBase {
     }
 
     private long createApp(String appCode) throws Exception {
-        String body = mvc.perform(post("/api/app-registry/apps")
+        String json = ApiTestAssertions.toJson(new CreateAppCommand(appCode, "n", null));
+        String body = mvc.perform(signer.sign(post("/api/app-registry/apps")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(ApiTestAssertions.toJson(new CreateAppCommand(appCode, "n", null))))
+                        .content(json), json))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("data").path("id").asLong();
@@ -315,9 +338,11 @@ class SsoClientControllerTest extends ApiTestBase {
     }
 
     private String[] createClientWithSecret(long appId) throws Exception {
-        String body = mvc.perform(post("/api/app-registry/apps/{appId}/sso-clients", appId)
+        CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, SCOPES, GRANTS);
+        String json = ApiTestAssertions.toJson(command);
+        String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(ApiTestAssertions.toJson(new CreateSsoClientCommand(REDIRECT_URIS, SCOPES, GRANTS))))
+                        .content(json), json))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         JsonNode data = objectMapper.readTree(body).path("data");

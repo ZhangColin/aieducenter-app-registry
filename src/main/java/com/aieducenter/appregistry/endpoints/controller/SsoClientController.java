@@ -4,6 +4,7 @@ import com.aieducenter.appregistry.application.SsoClientAppService;
 import com.aieducenter.appregistry.application.dto.command.CreateSsoClientCommand;
 import com.aieducenter.appregistry.application.dto.response.SsoClientCreatedResponse;
 import com.aieducenter.appregistry.application.dto.response.SsoClientResponse;
+import com.cartisan.openapi.annotation.RequireSignature;
 import com.cartisan.web.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/app-registry/apps/{appId}/sso-clients")
+@RequireSignature
 @Tag(name = "SsoClients", description = "SSO facet 管理（OIDC client 元数据）")
 public class SsoClientController {
 

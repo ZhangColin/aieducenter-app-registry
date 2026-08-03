@@ -3,6 +3,7 @@ package com.aieducenter.appregistry.endpoints.controller;
 import com.aieducenter.appregistry.application.RegisteredAppAppService;
 import com.aieducenter.appregistry.application.dto.command.CreateAppCommand;
 import com.aieducenter.appregistry.application.dto.response.AppResponse;
+import com.cartisan.openapi.annotation.RequireSignature;
 import com.cartisan.web.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/app-registry/apps")
+@RequireSignature
 @Validated
 @Tag(name = "Apps", description = "应用登记管理")
 public class AppController {

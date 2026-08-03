@@ -27,8 +27,9 @@ import java.util.Optional;
  * 入库密文 → 明文进响应。之后任何接口都不再返回明文。</p>
  *
  * <p>{@link #resolveApiKeyInfo(String)} 同时服务 bootstrap 端点 {@code GET /api-keys/{apiKey}}
- * 与 {@link LocalApiKeyProvider}：按 {@code api_key} 查、join app 算组合状态
- * ({@code key.status && app.status})、内存解密组 {@code ApiKeyInfo(appId=api_key, appName, apiSecret=明文, status)}。</p>
+ * 与 {@link LocalApiKeyProvider}：按 {@code api_key} 查、join app 校验状态
+ * ({@code key.status && app.status})、内存解密组 {@code ApiKeyInfo(apiKey, appName, apiSecret=明文)}。
+ * key 或 app 任一禁用/不存在 → 返回 {@link Optional#empty()}（框架视为不可用）。</p>
  *
  * @since 0.1.0
  */
@@ -107,24 +108,23 @@ public class ApiKeyAppService {
     }
 
     /**
-     * 解析 {@code apiKey} → 框架 {@link ApiKeyInfo}（组合状态 = facet.status && app.status）。
+     * 解析 {@code apiKey} → 框架 {@link ApiKeyInfo}（校验 key.status && app.status 均 ACTIVE）。
      *
      * <p>供 bootstrap 端点 {@code GET /api-keys/{apiKey}} 与 {@link LocalApiKeyProvider} 共用。
-     * app 禁用 / 不存在 → status=DISABLED（框架拒签）。明文 secret 内存解密，仅活跃时被框架使用。</p>
+     * key 或 app 任一禁用/不存在 → 返回 {@link Optional#empty()}（框架拒签）。明文 secret 内存解密。</p>
      *
      * @param apiKey 凭证标识（= 框架 X-App-Id）
-     * @return ApiKeyInfo；不存在返 empty
+     * @return ApiKeyInfo；key/app 任一不可用返 empty
      */
     @Transactional(readOnly = true)
     public Optional<ApiKeyInfo> resolveApiKeyInfo(String apiKey) {
-        return apiKeyRepository.findByApiKey(apiKey).map(key -> {
-            Optional<RegisteredApp> app = appRepository.findById(key.getAppId());
-            String appName = app.map(RegisteredApp::getName).orElse("");
-            boolean active = key.getStatus() == ApiKeyStatus.ACTIVE
-                    && app.map(a -> a.getStatus() == RegisteredAppStatus.ACTIVE).orElse(false);
-            String plaintextSecret = encrypter.decrypt(key.getApiSecret());
-            return new ApiKeyInfo(key.getApiKey(), appName, plaintextSecret, active ? "ACTIVE" : "DISABLED");
-        });
+        return apiKeyRepository.findByApiKey(apiKey)
+                .filter(key -> key.getStatus() == ApiKeyStatus.ACTIVE)
+                .flatMap(key -> {
+                    Optional<RegisteredApp> app = appRepository.findById(key.getAppId());
+                    return app.filter(a -> a.getStatus() == RegisteredAppStatus.ACTIVE)
+                            .map(a -> new ApiKeyInfo(key.getApiKey(), a.getName(), encrypter.decrypt(key.getApiSecret())));
+                });
     }
 
     private RegisteredApp loadApp(Long appId) {

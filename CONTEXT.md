@@ -10,7 +10,7 @@
 2. **两类 secret 存储相反**：签名 `apiSecret` 必须**可取回**（加密存，消费方要明文验 HMAC）；SSO `client_secret` 必须 **hash-only**（像密码，IdP 本地比对、永不返回）。
 3. **`ApiKeyInfo`/`ApiKeyProvider` 只服务签名 facet**：绝不把 OIDC 字段塞进 `cartisan-openapi` 框架；SSO facet 走独立端点、identity 直接消费。
 4. **`GET /api/app-registry/api-keys/{apiKey}` 只返签名 facet**：不返 SSO 字段。
-5. **api-keys 查询端点无验签，必须加固**：`GET /api/app-registry/api-keys/{apiKey}` 是唯一不验签的端点（逃生舱——知道 `apiKey` 即可取回 `apiSecret`，解决主密钥轮换等场景）；靠网络隔离加固。其余管理接口均须验签。
+5. **签名 facet bootstrap 端点无验签（`@NoSignature`），SSO bootstrap 端点需验签（`@RequireSignature`）**：`GET /api/app-registry/api-keys/{apiKey}` 是唯一不验签的端点（逃生舱——知道 `apiKey` 即可取回 `apiSecret`，解决主密钥轮换等场景）；靠网络隔离加固。`GET /api/app-registry/sso-clients/{clientId}` 需验签（identity 作为平台核心服务可预先持有签名凭证，无死锁）。其余管理接口均须验签。
 6. **本服务不做 OIDC token 签发/登录流**（identity 做）；只持 SSO client **元数据**。
 
 ## 术语表（Ubiquitous Language）
@@ -26,7 +26,7 @@ _Avoid_: 把签名 facet 的凭证载体当作应用本身。
 _Avoid_: 把 facet 叫"模块/功能"。
 
 **签名 facet (Signature Facet)**:
-facet 之一：`apiKey` / `apiSecret`，供 `cartisan-openapi` 机机验签（HMAC-SHA256）。secret 必须**可取回**（加密存）。对应框架契约 `ApiKeyInfo(appId/appName/apiSecret/status)`（框架已移除 `permissions`——签名=纯认证）。
+facet 之一：`apiKey` / `apiSecret`，供 `cartisan-openapi` 机机验签（HMAC-SHA256）。secret 必须**可取回**（加密存）。对应框架契约 `ApiKeyInfo(apiKey/appName/apiSecret)`。
 _Avoid_: 把 OIDC 字段塞进签名 facet。
 
 **SSO facet (SSO Facet)**:
@@ -38,11 +38,11 @@ _Avoid_: 把 `client_secret` 与签名 `apiSecret` 同列同逻辑存。
 _Avoid_: 客户。
 
 **bootstrap 端点 (Bootstrap Endpoint)**:
-唯一不验签的端点：`GET /api/app-registry/api-keys/{apiKey}`。作为**逃生舱**——应用只需知道自己的 `apiKey` 即可取回 `apiSecret`，不要求调用方持有有效签名凭证。解决"主密钥轮换后旧密文失效 → 无法调用任何验签接口"的死锁。靠网络隔离加固。
+两类：**签名 bootstrap**（`GET /api/app-registry/api-keys/{apiKey}`，`@NoSignature`，无验签）与 **SSO bootstrap**（`GET /api/app-registry/sso-clients/{clientId}`，`@RequireSignature`，需验签）。签名 bootstrap 是**唯一不验签的逃生舱**——应用只需知道自己的 `apiKey` 即可取回 `apiSecret`，解决"主密钥轮换后旧密文失效 → 无法调用任何验签接口"的死锁。SSO bootstrap 需验签（identity 预持凭证，无死锁）。均靠网络隔离加固。
 _Avoid_: 把其他管理接口也当作 bootstrap 端点。
 
 **apiKey**:
-签名 facet 的凭证标识，即 `api_key`。框架 `X-App-Id` header / `callerAppId` / `ApiKeyInfo.appId` 的实际值。String 类型、可轮换。与 `appId`（Long TSID 内部主键）**不是同一概念**——框架层 `appId` 命名后续统一为 `apiKey`。
+签名 facet 的凭证标识，即 `api_key`。框架 `X-App-Id` header / `callerAppId` / `ApiKeyInfo.apiKey` 的实际值。String 类型、可轮换。与 `appId`（Long TSID 内部主键）**不是同一概念**。
 _Avoid_: 与 `appId`（内部主键）混用。
 
 **apiSecret**:
@@ -65,7 +65,7 @@ _Avoid_: 与 `appId`（内部主键）混用。
 
 - 判据：两 facet 之间无跨边界不变式（独立轮换/启停、独立唯一性约束、独立被寻址）；塞进同一聚合是"大聚合"反模式。
 - `Application` 是**治理锚点**（name/description/应用级状态），不能退化成只剩 name 的空壳。
-- **app 禁用级联到 facet（已定）**：查询时 **join app 校验**（非领域事件）。`LocalApiKeyProvider` 按 `api_key` 查时本来就要走 app 拿 `appName`，顺带校验 app 状态——组 `ApiKeyInfo.status = (api_key.status == ACTIVE && app.status == ACTIVE) ? ACTIVE : DISABLED`（app 或 api_key 任一禁用 → 框架拒签）。SSO 端点同理（app / client 任一禁用 → 不返有效元数据）。无冗余状态、实时一致、不靠同事务强一致。
+- **app 禁用级联到 facet（已定）**：查询时 **join app 校验**（非领域事件）。`LocalApiKeyProvider` 按 `api_key` 查时本来就要走 app 拿 `appName`，顺带校验 app 状态——key 或 app 任一禁用/不存在 → 返回 `Optional.empty()`（框架拒签）。SSO 端点同理（app / client 任一禁用 → 不返有效元数据）。无冗余状态、实时一致、不靠同事务强一致。
 - 表：`ar_registered_apps`（app）+ 签名 facet 表 + SSO facet 表（下轮定，同 `ar_` 前缀、表名对应实体）。**Greenfield**：弃旧 V1–V3 与 `oas_api_keys`，新 V1 起建，无数据迁移。
 - **基数（讨论中，未定）**：倾向两 facet 都 **1:1**。轮换重叠（零停机）用「当前 secret + 上一份 secret」影子列解决（与 SSO `client_secret_prev_hash` 同款），**不必上 1:N**。多 apiKey 的其它动机（多环境/子系统/多权限范围）通常更适合建模为**多个独立 app**。仅当出现「同一 app 必须同时持多个活跃签名凭证」的具体需求才放 1:N。
 - **多 apiKey 的代价（若启用）**：`callerAppId`（= 具体那张 apiKey）将标识凭证而非应用，须引入 per-key 审计/限流/计量/吊销层——复杂度跳一档。
@@ -96,10 +96,10 @@ _Avoid_: 与 `appId`（内部主键）混用。
 | 审计 | `created_at`/`updated_at`/`created_by`/`updated_by` + `deleted`（软删） |
 
 - **无 `api_secret_prev`**：零停机轮换重叠先不做（YAGNI）；真需要再加影子列（与 SSO `client_secret_prev_hash` 同款）。
-- **无 `permissions` 列**：框架已移除 `ApiKeyInfo.permissions`，签名 = 纯认证（已登记应用可调）。
+- **无 `permissions` 列、无 `status` 字段**：框架 `ApiKeyInfo` 为纯 3 参 record `(apiKey, appName, apiSecret)`，无 `permissions`/`status`——签名 = 纯认证（已登记应用可调），不可用由 `Optional.empty()` 表达。
 - **`api_key` 生成必须 SecureRandom**（修旧 `ApiKey` 用 hutool `RandomUtil` 的不安全实现）。
 - **`api_key` 撞名检测**：复用 `app_code` 同款——native query 先查（看含软删全行）+ `throw DomainException`；DB 唯一约束作并发兜底（框架现已 `DuplicateKeyException → 409`）。
-- **`LocalApiKeyProvider`**（本服务自己的 `ApiKeyProvider` 实现）：直读 `ar_api_keys`（按 `api_key` 查、join app、内存解密 `api_secret`），组 `ApiKeyInfo(appId=api_key, appName, apiSecret=明文, status)`，其中 `status = api_key.status && app.status` 联合（app 禁用则 facet 失效）；**不自调 HTTP**。
+- **`LocalApiKeyProvider`**（本服务自己的 `ApiKeyProvider` 实现）：直读 `ar_api_keys`（按 `api_key` 查、join app、内存解密 `api_secret`），组 `ApiKeyInfo(apiKey, appName, apiSecret=明文)`；key 或 app 任一禁用 → 返回 `null`（框架视为不可用）；**不自调 HTTP**。
 - **`GET /api/app-registry/api-keys/{apiKey}`**：返 `ApiResponse.ok(ApiKeyInfo)`；**只返签名 facet，不返 SSO 字段**。与 `RemoteApiKeyProvider` 的查询契约对齐。
 - **加固**：网络隔离（见下）。
 
@@ -120,7 +120,7 @@ _Avoid_: 与 `appId`（内部主键）混用。
 
 - **边界（坐实不变式 6）**：app-registry **只持元数据 + 提供数据**，不做任何 OIDC 流程逻辑（授权 / token 签发 / client 认证比对 / 登录流——皆 identity 职责）。`client_secret` 的**生成**算登记动作（登记处发凭证），归 app-registry；**比对**算 SSO 流程，归 identity。
 - **前置假设（hash-only ⟹ client 认证方式）**：`client_secret` hash-only → 排除 `client_secret_jwt`（需明文验签）→ 隐含 **`client_secret_post`**（应用发明文、identity 比对 hash）。这不是 app-registry 的新选择，是不变式的推论。若 SSO 项目最终坚持 `client_secret_jwt`，需回架构重谈"client_secret 永不返回明文"不变式（届时改可逆加密存，同签名 `apiSecret`）。
-- **identity 消费契约**：`GET /api/app-registry/sso-clients/{clientId}` 返 client 元数据（**含 `client_secret` 的 hash**，不含明文），identity 拉取 + 缓存 + 本地比对。查询时 join app，**app / client 任一禁用 → 不返有效元数据**（与签名 facet 级联同款）。与签名 facet `GET /api/app-registry/api-keys/{apiKey}` 对称（拉取 + 缓存 + 本地验证），差异仅"返 hash 不返明文"（hash-only 不变式使然）。**不做比对端点**（比对是 SSO 职责）。
+- **identity 消费契约**：`GET /api/app-registry/sso-clients/{clientId}`（`@RequireSignature`，需验签）返 client 元数据（**含 `client_secret` 的 hash**，不含明文），identity 拉取 + 缓存 + 本地比对。查询时 join app，**app / client 任一禁用 → 不返有效元数据**（与签名 facet 级联同款）。与签名 facet `GET /api/app-registry/api-keys/{apiKey}` 对称（拉取 + 缓存 + 本地验证），差异：SSO bootstrap 需验签且"返 hash 不返明文"（hash-only 不变式使然）。**不做比对端点**（比对是 SSO 职责）。
 - **无 `client_secret_prev_hash`**：零停机轮换重叠先不做（YAGNI，与签名 facet 一致）。
 - **`client_id` 撞名检测**：复用 `app_code`/`api_key` 同款——native query 先查（看含软删全行）+ `throw DomainException`；DB 唯一约束作并发兜底（`DuplicateKeyException → 409`）。
 - **字段集先按 OIDC 标准最小集**：`client_name` 复用 `RegisteredApp.name`（不单存）；`token_endpoint_auth_method`（默认 `client_secret_post`）/ token TTL 等先不留——identity 建时真需要再加列（greenfield 加列成本低）。
@@ -131,7 +131,7 @@ _Avoid_: 与 `appId`（内部主键）混用。
 不变式 5「bootstrap 端点必须加固」——本项目选定手段：**内网 only（网络隔离）**。
 
 - app-registry 部署为**只对内可达**（内网域名/IP + 防火墙）；外部不知此服务、不触达其 bootstrap 端点。
-- `GET /api/app-registry/api-keys/{apiKey}` 与 SSO 端点的调用方，按"谁需要调"全是**可信的自有 provider 服务**（外部消费方只拿 `apiKey`/`apiSecret` 签自己请求、不调 api-keys 查询；外部应用也不触达 SSO 端点）。
+- `GET /api/app-registry/api-keys/{apiKey}`（`@NoSignature`，无验签）与 `GET /api/app-registry/sso-clients/{clientId}`（`@RequireSignature`，需验签）的调用方，按"谁需要调"全是**可信的自有 provider 服务**（外部消费方只拿 `apiKey`/`apiSecret` 签自己请求、不调 api-keys 查询；外部应用也不触达 SSO 端点）。
 - **不做 bootstrap token / mTLS / IP allowlist**：app-registry 本身即安全服务，在其 bootstrap 端点上再叠鉴权是冗余；网络边界已是强制信任边界。
 - 残余风险（`apiKey` 泄漏 → fetch `apiSecret`）已接受：`apiKey` 仅在可信服务间 + 加密通道流转，泄漏面可控；平台暂不引入 KMS/Vault。
 

@@ -37,11 +37,6 @@ public enum ApiKeyStatus implements BaseEnum<ApiKeyStatus> {
         return name;
     }
 
-    /** SPI 契约 {@code ApiKeyInfo.status} 字符串（"ACTIVE" 表示框架放行验签）。*/
-    public String spiStatus() {
-        return this == ACTIVE ? "ACTIVE" : "DISABLED";
-    }
-
     /**
      * JPA Converter - 自动应用到所有 {@link ApiKeyStatus} 字段（实体零注解）。
      */

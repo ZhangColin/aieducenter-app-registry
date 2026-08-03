@@ -10,9 +10,8 @@ import org.springframework.stereotype.Component;
  * <p>直读自己表、内存解密，组 {@link ApiKeyInfo}——<strong>不自调 HTTP</strong>
  * （本服务即登记处，无需绕一圈 HTTP 调自己的 bootstrap 端点）。</p>
  *
- * <p>框架契约 {@code getByAppId(String appId)} 的入参 {@code appId} 实为 {@code api_key}
- * （{@code callerAppId = X-App-Id = api_key}，框架禁改）——此处按 {@code api_key} 查。
- * 组合状态级联（facet.status && app.status）由 {@link ApiKeyAppService#resolveApiKeyInfo} 统一计算。</p>
+ * <p>框架契约 {@code getByApiKey(String apiKey)} 的入参 {@code apiKey} 即 {@code api_key}
+ * （{@code callerAppId = X-App-Id = api_key}，框架禁改）——此处按 {@code api_key} 查。</p>
  *
  * @since 0.1.0
  */
@@ -26,10 +25,7 @@ public class LocalApiKeyProvider implements ApiKeyProvider {
     }
 
     @Override
-    public ApiKeyInfo getByAppId(String appId) {
-        if (appId == null || appId.isBlank()) {
-            return null;
-        }
-        return apiKeyAppService.resolveApiKeyInfo(appId).orElse(null);
+    public ApiKeyInfo getByApiKey(String apiKey) {
+        return apiKeyAppService.resolveApiKeyInfo(apiKey).orElse(null);
     }
 }
