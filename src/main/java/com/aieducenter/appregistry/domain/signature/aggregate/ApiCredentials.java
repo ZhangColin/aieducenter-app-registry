@@ -4,11 +4,11 @@ import java.security.SecureRandom;
 import java.util.Base64;
 
 /**
- * 签名 facet 凭证生成（{@code apiKey} + {@code apiSecret} 明文）。
+ * 签名 facet 凭证生成——仅生成 {@code apiSecret} 明文。
  *
- * <p>用 {@link SecureRandom} 生成 32 字节随机数 → Base64URL（无填充）——修旧 hutool
- * {@code RandomUtil} 的非密码学安全实现（ADR-0002 §3）。明文 {@code apiSecret} 由应用层
- * 加密后入库、仅在创建/轮换响应里返一次。</p>
+ * <p>{@code apiKey} 不再随机生成，直接使用 {@code RegisteredApp.appCode}。
+ * 本工具只负责用 {@link SecureRandom} 生成 32 字节随机数 → Base64URL（无填充）作为
+ * apiSecret。明文由应用层加密后入库、仅在创建/轮换响应里返一次。</p>
  *
  * <p>纯 JDK、无 Spring 依赖，可在领域层使用。</p>
  *
@@ -23,20 +23,13 @@ public final class ApiCredentials {
     }
 
     /**
-     * 生成一对新的凭证（apiKey + 明文 apiSecret）。
+     * 生成一个新的明文 apiSecret（32-byte SecureRandom → Base64URL 无填充）。
      *
-     * @return 生成的凭证对
+     * @return 明文 apiSecret
      */
-    public static Generated generate() {
-        byte[] apiKeyBytes = new byte[BYTE_LENGTH];
+    public static String generateSecret() {
         byte[] secretBytes = new byte[BYTE_LENGTH];
-        RANDOM.nextBytes(apiKeyBytes);
         RANDOM.nextBytes(secretBytes);
-        Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
-        return new Generated(encoder.encodeToString(apiKeyBytes), encoder.encodeToString(secretBytes));
-    }
-
-    /** 生成结果：apiKey（凭证标识）+ apiSecret（明文，待加密）。*/
-    public record Generated(String apiKey, String apiSecret) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(secretBytes);
     }
 }

@@ -8,7 +8,6 @@ import com.aieducenter.appregistry.domain.app.enums.RegisteredAppStatus;
 import com.aieducenter.appregistry.domain.app.repository.RegisteredAppRepository;
 import com.aieducenter.appregistry.domain.error.AppRegistryMessage;
 import com.aieducenter.appregistry.domain.signature.aggregate.ApiCredentials;
-import com.aieducenter.appregistry.domain.signature.aggregate.ApiCredentials.Generated;
 import com.aieducenter.appregistry.domain.signature.aggregate.ApiKey;
 import com.aieducenter.appregistry.domain.signature.enums.ApiKeyStatus;
 import com.aieducenter.appregistry.domain.signature.port.ApiSecretEncrypter;
@@ -36,9 +35,6 @@ import java.util.Optional;
 @Service
 public class ApiKeyAppService {
 
-    /** 随机 apiKey 自撞名重试上限（碰撞概率可忽略，仅作安全网）。*/
-    private static final int GENERATE_MAX_ATTEMPTS = 10;
-
     private final ApiKeyRepository apiKeyRepository;
     private final RegisteredAppRepository appRepository;
     private final ApiSecretEncrypter encrypter;
@@ -55,24 +51,25 @@ public class ApiKeyAppService {
     /**
      * 创建或轮换应用的签名 facet（1:1，同一端点两用）。
      *
-     * <p>已有活跃 facet → 原地轮换（换新 apiKey + 密文，重置 ACTIVE）；否则新建。
-     * 响应一次性返回明文 {@code apiSecret}。</p>
+     * <p>apiKey = app.getAppCode()（创建后不可变）。已有活跃 facet → 原地轮换（只换 secret，重置 ACTIVE）；
+     * 否则新建。响应一次性返回明文 {@code apiSecret}。</p>
      */
     @Transactional
     public ApiKeyCreatedResponse createOrRotate(Long appId) {
-        loadApp(appId);
-        Generated generated = generateUnique();
+        RegisteredApp app = loadApp(appId);
+        String apiKey = app.getAppCode();
+        String plaintextSecret = ApiCredentials.generateSecret();
 
         Optional<ApiKey> existing = apiKeyRepository.findByAppId(appId);
         ApiKey key;
         if (existing.isPresent()) {
             key = existing.get();
-            key.rotate(generated.apiKey(), encrypter.encrypt(generated.apiSecret()));
+            key.rotate(encrypter.encrypt(plaintextSecret));
         } else {
-            key = ApiKey.create(appId, generated.apiKey(), encrypter.encrypt(generated.apiSecret()));
+            key = ApiKey.create(appId, apiKey, encrypter.encrypt(plaintextSecret));
         }
         apiKeyRepository.saveAndFlush(key);
-        return mapper.toCreated(key, generated.apiSecret());
+        return mapper.toCreated(key, plaintextSecret);
     }
 
     /**
@@ -128,17 +125,6 @@ public class ApiKeyAppService {
             String plaintextSecret = encrypter.decrypt(key.getApiSecret());
             return new ApiKeyInfo(key.getApiKey(), appName, plaintextSecret, active ? "ACTIVE" : "DISABLED");
         });
-    }
-
-    private Generated generateUnique() {
-        for (int i = 0; i < GENERATE_MAX_ATTEMPTS; i++) {
-            Generated candidate = ApiCredentials.generate();
-            if (!apiKeyRepository.existsByApiKey(candidate.apiKey())) {
-                return candidate;
-            }
-        }
-        throw new IllegalStateException("Failed to generate unique api_key after "
-                + GENERATE_MAX_ATTEMPTS + " attempts");
     }
 
     private RegisteredApp loadApp(Long appId) {

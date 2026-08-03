@@ -17,9 +17,10 @@ import org.hibernate.annotations.SQLRestriction;
 /**
  * 签名 facet 聚合根——机机验签凭证（{@code apiKey}/{@code apiSecret}）。
  *
- * <p>1:1 挂在 {@code RegisteredApp} 上、可空。{@code apiKey} = 框架 {@code X-App-Id}/{@code callerAppId}，
- * 可完全轮换；{@code apiSecret} 以 <strong>AES-GCM 密文</strong>入库（明文不入库、不入日志），
- * 内存解密供 HMAC 验签。明文仅由应用层在创建/轮换时生成、加密、返响应一次。</p>
+ * <p>1:1 挂在 {@code RegisteredApp} 上、可空。{@code apiKey} = {@code RegisteredApp.appCode}
+ * （= 框架 {@code X-App-Id}/{@code callerAppId}），创建时设定不可变；{@code apiSecret} 以
+ * <strong>AES-GCM 密文</strong>入库（明文不入库、不入日志），内存解密供 HMAC 验签。
+ * 明文仅由应用层在创建/轮换时生成、加密、返响应一次。</p>
  *
  * <h3>状态机</h3>
  * <ul>
@@ -71,10 +72,11 @@ public class ApiKey extends AuditableSoftDeletable implements AggregateRoot<ApiK
     }
 
     /**
-     * 创建签名 facet（工厂）。{@code apiKey}/密文由应用层生成（SecureRandom + AES）后传入。
+     * 创建签名 facet（工厂）。{@code apiKey} = {@code appCode}（= 框架 X-App-Id），
+     * 密文由应用层生成（AES-GCM）后传入。
      *
      * @param appId           所属应用 id
-     * @param apiKey          凭证标识（= 框架 X-App-Id）
+     * @param apiKey          凭证标识（= appCode，创建后不可变）
      * @param encryptedSecret AES-GCM 密文
      * @return 新建的、尚未持久化的签名 facet
      */
@@ -83,14 +85,13 @@ public class ApiKey extends AuditableSoftDeletable implements AggregateRoot<ApiK
     }
 
     /**
-     * 轮换凭证：换新 {@code apiKey} + 新密文，重置 ACTIVE（应用层先生成+加密再传入）。
+     * 轮换凭证：换新密文，重置 ACTIVE（应用层先生成+加密再传入）。
+     * apiKey 创建时设定（= appCode），不可变。
      *
-     * @param newApiKey          新凭证标识
      * @param newEncryptedSecret 新 apiSecret 密文
      */
-    public void rotate(String newApiKey, String newEncryptedSecret) {
-        // 入参由应用层生成（SecureRandom + AES），按构造保证非空，无需领域断言。
-        this.apiKey = newApiKey;
+    public void rotate(String newEncryptedSecret) {
+        // 入参由应用层生成（SecureRandom + AES），由调用方保证非空，无需领域断言。
         this.apiSecret = newEncryptedSecret;
         this.status = ApiKeyStatus.ACTIVE;
     }

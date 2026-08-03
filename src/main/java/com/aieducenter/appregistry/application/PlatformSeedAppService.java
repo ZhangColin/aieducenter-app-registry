@@ -25,7 +25,6 @@ public class PlatformSeedAppService {
     private static final Logger log = LoggerFactory.getLogger(PlatformSeedAppService.class);
 
     static final String ADMIN_CONSOLE_APP_CODE = "admin-console";
-    static final String ADMIN_CONSOLE_APP_KEY = "admin-console";
     static final String ADMIN_CONSOLE_APP_NAME = "管理后台";
 
     /** admin-console 不可变 appCode（供其他服务引用，避免硬编码）。*/
@@ -70,16 +69,16 @@ public class PlatformSeedAppService {
             // 解密成功 → 主密钥未变，跳过
         } catch (IllegalStateException | IllegalArgumentException e) {
             // 解密失败（AES-GCM 解密异常或 Base64 格式损坏）→ 主密钥已轮换，自动轮换 secret
-            String plaintextSecret = ApiCredentials.generate().apiSecret();
-            existing.rotate(ADMIN_CONSOLE_APP_KEY, encrypter.encrypt(plaintextSecret));
+            String plaintextSecret = ApiCredentials.generateSecret();
+            existing.rotate(encrypter.encrypt(plaintextSecret));
             apiKeyRepository.saveAndFlush(existing);
             log.info("admin-console seed rotated, apiSecret: {}", plaintextSecret);
         }
     }
 
     private void createApiKey(RegisteredApp app) {
-        String plaintextSecret = ApiCredentials.generate().apiSecret();
-        ApiKey key = ApiKey.create(app.getId(), ADMIN_CONSOLE_APP_KEY, encrypter.encrypt(plaintextSecret));
+        String plaintextSecret = ApiCredentials.generateSecret();
+        ApiKey key = ApiKey.create(app.getId(), app.getAppCode(), encrypter.encrypt(plaintextSecret));
         apiKeyRepository.saveAndFlush(key);
         log.info("admin-console seed created, apiSecret: {}", plaintextSecret);
     }

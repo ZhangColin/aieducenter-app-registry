@@ -26,10 +26,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 签名 facet 端到端测试——MockMvc + 真实 PG，@Transactional 每用例回滚。
  *
- * <p>注：{@code api_key} 撞名 409 走 SecureRandom 生成路径无法经 API 触发（碰撞概率可忽略），
- * 其安全性由 {@code existsByApiKey}（native，看含软删全行，同 #3 app_code 同款已证）+
- * DB 普通唯一约束兜底保证。</p>
- *
  * @since 0.1.0
  */
 @SpringBootTest
@@ -67,7 +63,7 @@ class ApiKeyControllerTest extends ApiTestBase {
         JsonNode data = objectMapper.readTree(body).path("data");
         String apiKey = data.path("apiKey").asText();
         String plaintextSecret = data.path("apiSecret").asText();
-        assertThat(apiKey).isNotBlank();
+        assertThat(apiKey).isEqualTo("payment-service");
         assertThat(plaintextSecret).isNotBlank();
         assertThat(plaintextSecret).isNotEqualTo(apiKey);
 
@@ -155,7 +151,7 @@ class ApiKeyControllerTest extends ApiTestBase {
     }
 
     @Test
-    void givenExistingFacet_whenRotate_thenNewCredentialsAndOldKeyGone() throws Exception {
+    void givenExistingFacet_whenRotate_thenSecretChangesAndApiKeyUnchanged() throws Exception {
         long appId = createApp("payment-service");
         String[] first = createKeyWithSecret(appId);
         String oldApiKey = first[0];
@@ -169,15 +165,13 @@ class ApiKeyControllerTest extends ApiTestBase {
         String newApiKey = data.path("apiKey").asText();
         String newPlaintext = data.path("apiSecret").asText();
 
-        assertThat(newApiKey).isNotEqualTo(oldApiKey);
+        // apiKey 不变（= appCode），secret 已换
+        assertThat(newApiKey).isEqualTo(oldApiKey);
         assertThat(newPlaintext).isNotEqualTo(oldPlaintext);
 
-        // 旧 apiKey 已轮换掉 → bootstrap 404
+        // apiKey 不变 → 仍可按原 apiKey 查询，返回新 secret
         mvc.perform(get("/api/app-registry/api-keys/{apiKey}", oldApiKey))
-                .andExpect(status().isNotFound());
-
-        // 新 apiKey 可用
-        mvc.perform(get("/api/app-registry/api-keys/{apiKey}", newApiKey))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.apiSecret").value(newPlaintext));
     }
 

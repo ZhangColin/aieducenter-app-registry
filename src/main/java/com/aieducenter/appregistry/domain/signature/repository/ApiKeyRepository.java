@@ -2,8 +2,6 @@ package com.aieducenter.appregistry.domain.signature.repository;
 
 import com.aieducenter.appregistry.domain.signature.aggregate.ApiKey;
 import com.cartisan.data.jpa.repository.BaseRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 
@@ -25,11 +23,4 @@ public interface ApiKeyRepository extends BaseRepository<ApiKey, Long> {
      * 供 create-or-rotate（find 现有 / 查询 / 禁用 / 启用）。
      */
     Optional<ApiKey> findByAppId(Long appId);
-
-    /**
-     * {@code api_key} 是否存在（含软删行）——native query 绕过 @SQLRestriction。
-     * 生成随机 apiKey 后的撞名检查（碰撞概率可忽略，作安全网）。
-     */
-    @Query(value = "SELECT EXISTS(SELECT 1 FROM ar_api_keys WHERE api_key = :apiKey)", nativeQuery = true)
-    boolean existsByApiKey(@Param("apiKey") String apiKey);
 }

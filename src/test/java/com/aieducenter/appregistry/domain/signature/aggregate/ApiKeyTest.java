@@ -29,13 +29,13 @@ class ApiKeyTest {
     }
 
     @Test
-    void givenExistingKey_whenRotate_thenCredentialsChangeAndStatusActive() {
+    void givenExistingKey_whenRotate_thenSecretChangesAndStatusActive() {
         ApiKey key = ApiKey.create(APP_ID, "ak_old", "cipher_old");
         key.disable();
 
-        key.rotate("ak_new", "cipher_new");
+        key.rotate("cipher_new");
 
-        assertThat(key.getApiKey()).isEqualTo("ak_new");
+        assertThat(key.getApiKey()).isEqualTo("ak_old");
         assertThat(key.getApiSecret()).isEqualTo("cipher_new");
         assertThat(key.getStatus()).isEqualTo(ApiKeyStatus.ACTIVE);
     }
