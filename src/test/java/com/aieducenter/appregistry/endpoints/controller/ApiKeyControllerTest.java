@@ -143,15 +143,15 @@ class ApiKeyControllerTest extends ApiTestBase {
     }
 
     @Test
-    void givenAdminConsole_whenDisableApiKey_then409() throws Exception {
+    void givenAdminConsole_whenDisableApiKey_then403() throws Exception {
         seedService.seed();
         long appId = jdbcTemplate.queryForObject(
                 "SELECT id FROM ar_registered_apps WHERE app_code = 'admin-console' AND deleted = false",
                 Long.class);
 
         mvc.perform(put("/api/app-registry/apps/{appId}/api-keys/disable", appId))
-                .andExpect(status().isConflict())
-                .andExpect(ApiTestAssertions.assertError(409));
+                .andExpect(status().isForbidden())
+                .andExpect(ApiTestAssertions.assertError(403));
     }
 
     @Test

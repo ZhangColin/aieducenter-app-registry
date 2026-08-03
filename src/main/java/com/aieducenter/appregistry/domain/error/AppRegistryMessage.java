@@ -40,7 +40,7 @@ public enum AppRegistryMessage implements CodeMessage {
 
     // ===== Platform seed（平台预置应用，#6）=====
     /** 平台预置应用不可禁用（{0}=appCode）。*/
-    ADMIN_CONSOLE_CANNOT_DISABLE(409, "AR_ADMIN_CONSOLE_CANNOT_DISABLE", "平台预置应用不可禁用: {0}"),
+    ADMIN_CONSOLE_CANNOT_DISABLE(403, "AR_ADMIN_CONSOLE_CANNOT_DISABLE", "平台预置应用不可禁用: {0}"),
 
     // ===== SsoClient（SSO facet 聚合，#5）=====
     /** SSO 回调地址为空（至少一个 redirect_uri）。*/

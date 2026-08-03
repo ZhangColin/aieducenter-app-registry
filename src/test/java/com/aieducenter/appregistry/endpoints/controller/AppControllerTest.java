@@ -138,12 +138,12 @@ class AppControllerTest extends ApiTestBase {
     }
 
     @Test
-    void givenAdminConsoleApp_whenDisable_then409() throws Exception {
+    void givenAdminConsoleApp_whenDisable_then403() throws Exception {
         long id = createApp("admin-console");
 
         mvc.perform(put("/api/app-registry/apps/{id}/disable", id))
-                .andExpect(status().isConflict())
-                .andExpect(ApiTestAssertions.assertError(409));
+                .andExpect(status().isForbidden())
+                .andExpect(ApiTestAssertions.assertError(403));
     }
 
     @Test
