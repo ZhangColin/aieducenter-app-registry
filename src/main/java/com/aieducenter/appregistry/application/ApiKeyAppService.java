@@ -6,6 +6,7 @@ import com.aieducenter.appregistry.application.mapper.ApiKeyMapper;
 import com.aieducenter.appregistry.domain.app.aggregate.RegisteredApp;
 import com.aieducenter.appregistry.domain.app.enums.RegisteredAppStatus;
 import com.aieducenter.appregistry.domain.app.repository.RegisteredAppRepository;
+import com.aieducenter.appregistry.domain.error.AppRegistryMessage;
 import com.aieducenter.appregistry.domain.signature.aggregate.ApiCredentials;
 import com.aieducenter.appregistry.domain.signature.aggregate.ApiCredentials.Generated;
 import com.aieducenter.appregistry.domain.signature.aggregate.ApiKey;
@@ -84,11 +85,12 @@ public class ApiKeyAppService {
     }
 
     /**
-     * 禁用签名 facet。重复禁用返 409。
+     * 禁用签名 facet。重复禁用返 409。admin-console 不可禁用。
      */
     @Transactional
     public ApiKeyResponse disable(Long appId) {
-        loadApp(appId);
+        RegisteredApp app = loadApp(appId);
+        guardPlatformApp(app);
         ApiKey key = loadKeyByApp(appId);
         key.disable();
         apiKeyRepository.saveAndFlush(key);
@@ -142,6 +144,12 @@ public class ApiKeyAppService {
     private RegisteredApp loadApp(Long appId) {
         return appRepository.findById(appId)
                 .orElseThrow(() -> new DomainException(BaseCodeMessage.RESOURCE_NOT_FOUND, appId));
+    }
+
+    private void guardPlatformApp(RegisteredApp app) {
+        if (PlatformSeedAppService.PLATFORM_APP_CODE.equals(app.getAppCode())) {
+            throw new DomainException(AppRegistryMessage.ADMIN_CONSOLE_CANNOT_DISABLE, app.getAppCode());
+        }
     }
 
     private ApiKey loadKeyByApp(Long appId) {

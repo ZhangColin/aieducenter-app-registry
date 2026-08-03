@@ -5,6 +5,7 @@ import com.aieducenter.appregistry.application.dto.response.AppResponse;
 import com.aieducenter.appregistry.application.mapper.RegisteredAppMapper;
 import com.aieducenter.appregistry.domain.app.aggregate.RegisteredApp;
 import com.aieducenter.appregistry.domain.app.repository.RegisteredAppRepository;
+import com.aieducenter.appregistry.domain.error.AppRegistryMessage;
 import com.cartisan.core.exception.BaseCodeMessage;
 import com.cartisan.core.exception.DomainException;
 import com.cartisan.core.util.Assertions;
@@ -55,11 +56,14 @@ public class RegisteredAppAppService {
     }
 
     /**
-     * 禁用应用。重复禁用返 409。
+     * 禁用应用。重复禁用返 409。admin-console 不可禁用。
      */
     @Transactional
     public AppResponse disable(Long id) {
         RegisteredApp app = loadApp(id);
+        if (PlatformSeedAppService.PLATFORM_APP_CODE.equals(app.getAppCode())) {
+            throw new DomainException(AppRegistryMessage.ADMIN_CONSOLE_CANNOT_DISABLE, app.getAppCode());
+        }
         app.disable();
         appRepository.saveAndFlush(app);
         return appMapper.convert(app);

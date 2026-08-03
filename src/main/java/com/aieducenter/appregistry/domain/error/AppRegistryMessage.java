@@ -38,6 +38,10 @@ public enum AppRegistryMessage implements CodeMessage {
     /** 签名凭证已启用，无法再次启用。*/
     API_KEY_ALREADY_ENABLED(409, "AR_API_KEY_ALREADY_ENABLED", "签名凭证已处于启用状态"),
 
+    // ===== Platform seed（平台预置应用，#6）=====
+    /** 平台预置应用不可禁用（{0}=appCode）。*/
+    ADMIN_CONSOLE_CANNOT_DISABLE(409, "AR_ADMIN_CONSOLE_CANNOT_DISABLE", "平台预置应用不可禁用: {0}"),
+
     // ===== SsoClient（SSO facet 聚合，#5）=====
     /** SSO 回调地址为空（至少一个 redirect_uri）。*/
     SSO_REDIRECT_URI_REQUIRED(400, "AR_SSO_REDIRECT_URI_REQUIRED", "回调地址不能为空"),

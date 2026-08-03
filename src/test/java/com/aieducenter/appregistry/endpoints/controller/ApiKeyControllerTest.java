@@ -1,5 +1,6 @@
 package com.aieducenter.appregistry.endpoints.controller;
 
+import com.aieducenter.appregistry.application.PlatformSeedAppService;
 import com.aieducenter.appregistry.application.dto.command.CreateAppCommand;
 import com.aieducenter.appregistry.domain.signature.port.ApiSecretEncrypter;
 import com.cartisan.test.base.ApiTestAssertions;
@@ -40,11 +41,14 @@ class ApiKeyControllerTest extends ApiTestBase {
     private final ObjectMapper objectMapper;
     private final JdbcTemplate jdbcTemplate;
     private final ApiSecretEncrypter encrypter;
+    private final PlatformSeedAppService seedService;
 
-    ApiKeyControllerTest(ObjectMapper objectMapper, JdbcTemplate jdbcTemplate, ApiSecretEncrypter encrypter) {
+    ApiKeyControllerTest(ObjectMapper objectMapper, JdbcTemplate jdbcTemplate,
+                         ApiSecretEncrypter encrypter, PlatformSeedAppService seedService) {
         this.objectMapper = objectMapper;
         this.jdbcTemplate = jdbcTemplate;
         this.encrypter = encrypter;
+        this.seedService = seedService;
     }
 
     @Test
@@ -139,6 +143,18 @@ class ApiKeyControllerTest extends ApiTestBase {
     }
 
     @Test
+    void givenAdminConsole_whenDisableApiKey_then409() throws Exception {
+        seedService.seed();
+        long appId = jdbcTemplate.queryForObject(
+                "SELECT id FROM ar_registered_apps WHERE app_code = 'admin-console' AND deleted = false",
+                Long.class);
+
+        mvc.perform(put("/api/app-registry/apps/{appId}/api-keys/disable", appId))
+                .andExpect(status().isConflict())
+                .andExpect(ApiTestAssertions.assertError(409));
+    }
+
+    @Test
     void givenExistingFacet_whenRotate_thenNewCredentialsAndOldKeyGone() throws Exception {
         long appId = createApp("payment-service");
         String[] first = createKeyWithSecret(appId);
@@ -170,6 +186,19 @@ class ApiKeyControllerTest extends ApiTestBase {
         mvc.perform(post("/api/app-registry/apps/{appId}/api-keys", 77777777777L))
                 .andExpect(status().isNotFound())
                 .andExpect(ApiTestAssertions.assertError(404));
+    }
+
+    @Test
+    void givenSeed_whenBootstrapAdminConsole_thenReturnsValidCredentials() throws Exception {
+        seedService.seed();
+
+        mvc.perform(get("/api/app-registry/api-keys/{apiKey}", "admin-console"))
+                .andExpect(status().isOk())
+                .andExpect(ApiTestAssertions.assertOk())
+                .andExpect(jsonPath("$.data.appId").value("admin-console"))
+                .andExpect(jsonPath("$.data.appName").value("管理后台"))
+                .andExpect(jsonPath("$.data.apiSecret").isString())
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
     }
 
     @Test

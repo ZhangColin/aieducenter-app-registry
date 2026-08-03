@@ -5,12 +5,19 @@ import com.cartisan.data.jpa.repository.BaseRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Optional;
+
 /**
  * 已登记应用仓储。
  *
  * @since 0.1.0
  */
 public interface RegisteredAppRepository extends BaseRepository<RegisteredApp, Long> {
+
+    /**
+     * 按 {@code app_code} 查活跃应用（@SQLRestriction 过滤软删行）。
+     */
+    Optional<RegisteredApp> findByAppCode(String appCode);
 
     /**
      * app_code 是否已存在（含软删行）。

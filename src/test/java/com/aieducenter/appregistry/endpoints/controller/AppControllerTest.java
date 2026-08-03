@@ -138,6 +138,15 @@ class AppControllerTest extends ApiTestBase {
     }
 
     @Test
+    void givenAdminConsoleApp_whenDisable_then409() throws Exception {
+        long id = createApp("admin-console");
+
+        mvc.perform(put("/api/app-registry/apps/{id}/disable", id))
+                .andExpect(status().isConflict())
+                .andExpect(ApiTestAssertions.assertError(409));
+    }
+
+    @Test
     void givenMissingApp_whenGet_then404() throws Exception {
         mvc.perform(get("/api/app-registry/apps/{id}", 88888888888L))
                 .andExpect(status().isNotFound())
