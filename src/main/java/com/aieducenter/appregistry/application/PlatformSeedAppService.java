@@ -73,7 +73,7 @@ public class PlatformSeedAppService {
             String plaintextSecret = ApiCredentials.generate().apiSecret();
             existing.rotate(ADMIN_CONSOLE_APP_KEY, encrypter.encrypt(plaintextSecret));
             apiKeyRepository.saveAndFlush(existing);
-            log.info("admin-console seed rotated, appSecret: {}", plaintextSecret);
+            log.info("admin-console seed rotated, apiSecret: {}", plaintextSecret);
         }
     }
 
@@ -81,6 +81,6 @@ public class PlatformSeedAppService {
         String plaintextSecret = ApiCredentials.generate().apiSecret();
         ApiKey key = ApiKey.create(app.getId(), ADMIN_CONSOLE_APP_KEY, encrypter.encrypt(plaintextSecret));
         apiKeyRepository.saveAndFlush(key);
-        log.info("admin-console seed created, appSecret: {}", plaintextSecret);
+        log.info("admin-console seed created, apiSecret: {}", plaintextSecret);
     }
 }
