@@ -108,4 +108,49 @@ class RegisteredAppTest {
                 .extracting(e -> ((DomainException) e).getCodeMessage())
                 .isEqualTo(AppRegistryMessage.APP_ALREADY_ENABLED);
     }
+
+    // ---- update ----
+
+    @Test
+    void givenValidInput_whenUpdate_thenNameAndDescriptionUpdated() {
+        RegisteredApp app = RegisteredApp.create(VALID_APP_CODE, "旧名", "旧描述");
+
+        app.update("新名", "新描述");
+
+        assertThat(app.getName()).isEqualTo("新名");
+        assertThat(app.getDescription()).isEqualTo("新描述");
+        assertThat(app.getAppCode()).isEqualTo(VALID_APP_CODE);
+        assertThat(app.getStatus()).isEqualTo(RegisteredAppStatus.ACTIVE);
+    }
+
+    @Test
+    void givenNullDescription_whenUpdate_thenAllowed() {
+        RegisteredApp app = RegisteredApp.create(VALID_APP_CODE, "旧名", "旧描述");
+
+        app.update("新名", null);
+
+        assertThat(app.getName()).isEqualTo("新名");
+        assertThat(app.getDescription()).isNull();
+    }
+
+    @Test
+    void givenBlankName_whenUpdate_thenThrowsNameRequired() {
+        RegisteredApp app = RegisteredApp.create(VALID_APP_CODE, "旧名", null);
+
+        assertThatThrownBy(() -> app.update("  ", null))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getCodeMessage())
+                .isEqualTo(AppRegistryMessage.APP_NAME_REQUIRED);
+    }
+
+    @Test
+    void givenDisabledApp_whenUpdate_thenStillAllowed() {
+        RegisteredApp app = RegisteredApp.create(VALID_APP_CODE, "旧名", null);
+        app.disable();
+
+        app.update("新名", "新描述");
+
+        assertThat(app.getName()).isEqualTo("新名");
+        assertThat(app.getStatus()).isEqualTo(RegisteredAppStatus.DISABLED);
+    }
 }

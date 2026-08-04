@@ -1,6 +1,7 @@
 package com.aieducenter.appregistry.application;
 
 import com.aieducenter.appregistry.application.dto.command.CreateAppCommand;
+import com.aieducenter.appregistry.application.dto.command.UpdateAppCommand;
 import com.aieducenter.appregistry.application.dto.query.AppQuery;
 import com.aieducenter.appregistry.application.dto.response.AppResponse;
 import com.aieducenter.appregistry.application.mapper.RegisteredAppMapper;
@@ -18,7 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 应用登记应用服务——应用的创建 / 查询 / 禁用 / 启用。
+ * 应用登记应用服务——应用的创建 / 查询 / 更新 / 禁用 / 启用。
  *
  * <p>撞名主路径：应用层 {@code existsByAppCode}（看含软删全行）先查 + 抛 {@link DomainException}(409)；
  * DB 普通唯一约束作并发兜底（{@code DuplicateKeyException → 409}）。</p>
@@ -81,6 +82,17 @@ public class RegisteredAppAppService {
     public AppResponse enable(Long id) {
         RegisteredApp app = loadApp(id);
         app.enable();
+        appRepository.saveAndFlush(app);
+        return appMapper.convert(app);
+    }
+
+    /**
+     * 更新应用基本信息（name、description）。已禁用应用仍可修改。
+     */
+    @Transactional
+    public AppResponse update(Long id, UpdateAppCommand command) {
+        RegisteredApp app = loadApp(id);
+        app.update(command.name(), command.description());
         appRepository.saveAndFlush(app);
         return appMapper.convert(app);
     }

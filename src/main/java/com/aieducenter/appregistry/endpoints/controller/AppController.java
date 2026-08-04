@@ -2,6 +2,7 @@ package com.aieducenter.appregistry.endpoints.controller;
 
 import com.aieducenter.appregistry.application.RegisteredAppAppService;
 import com.aieducenter.appregistry.application.dto.command.CreateAppCommand;
+import com.aieducenter.appregistry.application.dto.command.UpdateAppCommand;
 import com.aieducenter.appregistry.application.dto.query.AppQuery;
 import com.aieducenter.appregistry.application.dto.response.AppResponse;
 import com.cartisan.openapi.annotation.RequireSignature;
@@ -71,5 +72,12 @@ public class AppController {
     @Operation(summary = "启用应用")
     public ApiResponse<AppResponse> enable(@PathVariable Long id) {
         return ApiResponse.ok(appService.enable(id));
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "更新应用信息")
+    public ApiResponse<AppResponse> update(@PathVariable Long id,
+                                           @Valid @RequestBody UpdateAppCommand command) {
+        return ApiResponse.ok(appService.update(id, command));
     }
 }

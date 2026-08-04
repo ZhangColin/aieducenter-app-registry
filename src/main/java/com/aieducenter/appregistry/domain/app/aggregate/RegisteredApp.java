@@ -109,4 +109,18 @@ public class RegisteredApp extends AuditableSoftDeletable implements AggregateRo
                 AppRegistryMessage.APP_ALREADY_ENABLED, appCode);
         this.status = RegisteredAppStatus.ACTIVE;
     }
+
+    /**
+     * 更新应用基本信息（name、description）。已禁用应用仍可修改。
+     *
+     * @param name        新应用名（不可为空）
+     * @param description 新描述（可空）
+     */
+    public void update(String name, String description) {
+        Assertions.require(
+                name != null && !name.isBlank(),
+                AppRegistryMessage.APP_NAME_REQUIRED);
+        this.name = name;
+        this.description = description;
+    }
 }

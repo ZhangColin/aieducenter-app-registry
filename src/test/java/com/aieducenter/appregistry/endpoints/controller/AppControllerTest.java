@@ -7,6 +7,7 @@ import com.cartisan.test.base.ApiTestAssertions;
 import com.cartisan.test.base.ApiTestBase;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
@@ -242,6 +243,89 @@ class AppControllerTest extends ApiTestBase {
     void givenNoSignature_whenCallRequireSignatureEndpoint_then401() throws Exception {
         // 对 @RequireSignature 端点发无签名请求 → 拦截器返回 401
         mvc.perform(get("/api/app-registry/apps/{id}", 1))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // ---- update ----
+
+    @Test
+    void givenValidUpdate_whenUpdate_thenNameAndDescriptionUpdated() throws Exception {
+        long id = createApp("payment-service");
+
+        String json = ApiTestAssertions.toJson(Map.of("name", "新支付服务", "description", "新描述"));
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json), json))
+                .andExpect(status().isOk())
+                .andExpect(ApiTestAssertions.assertOk())
+                .andExpect(jsonPath("$.data.id").value(id))
+                .andExpect(jsonPath("$.data.appCode").value("payment-service"))
+                .andExpect(jsonPath("$.data.name").value("新支付服务"))
+                .andExpect(jsonPath("$.data.description").value("新描述"))
+                .andExpect(jsonPath("$.data.status").value(1));
+    }
+
+    @Test
+    void givenNullDescription_whenUpdate_thenDescriptionCleared() throws Exception {
+        long id = createApp("payment-service");
+
+        String json = ApiTestAssertions.toJson(Map.of("name", "新支付服务"));
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json), json))
+                .andExpect(status().isOk())
+                .andExpect(ApiTestAssertions.assertOk())
+                .andExpect(jsonPath("$.data.name").value("新支付服务"))
+                .andExpect(jsonPath("$.data.description").doesNotExist());
+    }
+
+    @Test
+    void givenDisabledApp_whenUpdate_thenStillAllowed() throws Exception {
+        long id = createApp("payment-service");
+
+        // 先禁用
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{id}/disable", id), null))
+                .andExpect(status().isOk());
+
+        // 更新
+        String json = ApiTestAssertions.toJson(Map.of("name", "新名", "description", "desc"));
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json), json))
+                .andExpect(status().isOk())
+                .andExpect(ApiTestAssertions.assertOk())
+                .andExpect(jsonPath("$.data.name").value("新名"))
+                .andExpect(jsonPath("$.data.status").value(0));
+    }
+
+    @Test
+    void givenMissingApp_whenUpdate_then404() throws Exception {
+        String json = ApiTestAssertions.toJson(Map.of("name", "新名"));
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{id}", 88888888888L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json), json))
+                .andExpect(status().isNotFound())
+                .andExpect(ApiTestAssertions.assertError(404));
+    }
+
+    @Test
+    void givenBlankName_whenUpdate_then400() throws Exception {
+        long id = createApp("payment-service");
+
+        String json = ApiTestAssertions.toJson(Map.of("name", "  "));
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json), json))
+                .andExpect(status().isBadRequest())
+                .andExpect(ApiTestAssertions.assertError(400));
+    }
+
+    @Test
+    void givenNoSignature_whenUpdate_then401() throws Exception {
+        String json = ApiTestAssertions.toJson(Map.of("name", "新名"));
+        mvc.perform(put("/api/app-registry/apps/{id}", 1)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
                 .andExpect(status().isUnauthorized());
     }
 
