@@ -8,20 +8,20 @@ import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 
 /**
- * SSO facet（{@link SsoClient}）仓库。
+ * {@link SsoClient} 仓库。
  *
  * @since 0.1.0
  */
 public interface SsoClientRepository extends BaseRepository<SsoClient, Long> {
 
     /**
-     * 按 {@code client_id} 查活跃 SSO facet（@SQLRestriction 过滤软删行）。
+     * 按 {@code client_id} 查活跃 SsoClient（@SQLRestriction 过滤软删行）。
      * 供 bootstrap 端点解析 client 元数据。
      */
     Optional<SsoClient> findByClientId(String clientId);
 
     /**
-     * 按所属 app id 查活跃 SSO facet（@SQLRestriction 过滤软删行）。
+     * 按所属 app id 查活跃 SsoClient（@SQLRestriction 过滤软删行）。
      * 供 create-or-rotate（find 现有 / 查询 / 禁用 / 启用）。
      */
     Optional<SsoClient> findByAppId(Long appId);

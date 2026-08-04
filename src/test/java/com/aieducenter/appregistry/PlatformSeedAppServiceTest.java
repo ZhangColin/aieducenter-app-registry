@@ -52,7 +52,7 @@ class PlatformSeedAppServiceTest {
                 String.class);
         assertThat(appName).isEqualTo("管理后台");
 
-        // 断言：admin-console 签名 facet 已创建，secret 可解密
+        // 断言：admin-console ApiKey 已创建，secret 可解密
         String storedSecret = jdbcTemplate.queryForObject(
                 "SELECT api_secret FROM ar_api_keys WHERE api_key = 'admin-console' AND deleted = false",
                 String.class);

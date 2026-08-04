@@ -15,7 +15,7 @@ import lombok.Getter;
 import org.hibernate.annotations.SQLRestriction;
 
 /**
- * 签名 facet 聚合根——机机验签凭证（{@code apiKey}/{@code apiSecret}）。
+ * ApiKey 聚合根——机机验签凭证（{@code apiKey}/{@code apiSecret}）。
  *
  * <p>1:1 挂在 {@code RegisteredApp} 上、可空。{@code apiKey} = {@code RegisteredApp.appCode}
  * （= 框架 {@code X-App-Id}/{@code callerAppId}），创建时设定不可变；{@code apiSecret} 以
@@ -29,8 +29,8 @@ import org.hibernate.annotations.SQLRestriction;
  * </ul>
  *
  * <h3>组合生效</h3>
- * <p>本聚合 status 仅是 facet 自身状态；验签是否放行由
- * {@code ApiKey.status && RegisteredApp.status} 联合决定（app 禁用则 facet 失效）——
+ * <p>本聚合 status 仅是自身状态；验签是否放行由
+ * {@code ApiKey.status && RegisteredApp.status} 联合决定（app 禁用则凭证失效）——
  * 该级联在 {@code LocalApiKeyProvider}/bootstrap 端点查询时 join app 计算，不在本聚合。</p>
  *
  * @since 0.1.0
@@ -72,13 +72,13 @@ public class ApiKey extends AuditableSoftDeletable implements AggregateRoot<ApiK
     }
 
     /**
-     * 创建签名 facet（工厂）。{@code apiKey} = {@code appCode}（= 框架 X-App-Id），
+     * 创建 ApiKey（工厂）。{@code apiKey} = {@code appCode}（= 框架 X-App-Id），
      * 密文由应用层生成（AES-GCM）后传入。
      *
      * @param appId           所属应用 id
      * @param apiKey          凭证标识（= appCode，创建后不可变）
      * @param encryptedSecret AES-GCM 密文
-     * @return 新建的、尚未持久化的签名 facet
+     * @return 新建的、尚未持久化的 ApiKey
      */
     public static ApiKey create(Long appId, String apiKey, String encryptedSecret) {
         return new ApiKey(appId, apiKey, encryptedSecret);
@@ -97,7 +97,7 @@ public class ApiKey extends AuditableSoftDeletable implements AggregateRoot<ApiK
     }
 
     /**
-     * 禁用签名 facet。仅 ACTIVE 可禁用，重复禁用抛 409。
+     * 禁用 ApiKey。仅 ACTIVE 可禁用，重复禁用抛 409。
      */
     public void disable() {
         Assertions.require(status == ApiKeyStatus.ACTIVE, AppRegistryMessage.API_KEY_ALREADY_DISABLED);
@@ -105,7 +105,7 @@ public class ApiKey extends AuditableSoftDeletable implements AggregateRoot<ApiK
     }
 
     /**
-     * 启用签名 facet。仅 DISABLED 可启用，重复启用抛 409。
+     * 启用 ApiKey。仅 DISABLED 可启用，重复启用抛 409。
      */
     public void enable() {
         Assertions.require(status == ApiKeyStatus.DISABLED, AppRegistryMessage.API_KEY_ALREADY_ENABLED);

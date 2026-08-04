@@ -4,7 +4,7 @@ import java.security.SecureRandom;
 import java.util.Base64;
 
 /**
- * 签名 facet 凭证生成——仅生成 {@code apiSecret} 明文。
+ * ApiKey 凭证生成——仅生成 {@code apiSecret} 明文。
  *
  * <p>{@code apiKey} 不再随机生成，直接使用 {@code RegisteredApp.appCode}。
  * 本工具只负责用 {@link SecureRandom} 生成 32 字节随机数 → Base64URL（无填充）作为

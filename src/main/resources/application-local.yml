@@ -1,3 +1,5 @@
+APP_REGISTRY_API_SECRET_MASTER_KEY: UjPTu0eCrnOf6LbpUC/Xz7CZOD6ArgD8aBAfjBDrALk=
+
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/aieducenter
@@ -7,5 +9,6 @@ spring:
     redis:
       host: localhost
       port: 6379
+      password: truth
 
 spring.jpa.show-sql: true

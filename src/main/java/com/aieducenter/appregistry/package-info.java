@@ -4,8 +4,8 @@
  * <h3>职责</h3>
  * <ul>
  *   <li>平台「应用 / 消费方」的单一登记处（基础能力层）</li>
- *   <li>一个应用一行（{@code RegisteredApp} 治理锚点），持两个独立、可空的 facet：
- *       签名 facet（{@code apiKey}/{@code apiSecret}）与 SSO facet（OIDC client 元数据）</li>
+ *   <li>一个应用一行（{@code RegisteredApp} 治理锚点），持两个独立、可空的凭证：
+ *       ApiKey（{@code apiKey}/{@code apiSecret}）与 SsoClient（OIDC client 元数据）</li>
  *   <li>为 {@code cartisan-openapi} 提供机机验签所需的 {@code ApiKeyProvider}（Local，直读表）</li>
  *   <li>为 identity（IdP）提供 SSO client 元数据</li>
  * </ul>

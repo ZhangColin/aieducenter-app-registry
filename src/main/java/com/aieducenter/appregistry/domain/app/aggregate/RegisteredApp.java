@@ -15,10 +15,10 @@ import lombok.Getter;
 import org.hibernate.annotations.SQLRestriction;
 
 /**
- * 已登记应用（聚合根）——签名 facet 与 SSO facet 的共同宿主与治理锚点。
+ * 已登记应用（聚合根）——ApiKey 与 SsoClient 的共同宿主与治理锚点。
  *
  * <p>一个应用一行：持 {@code app_code}（稳定公开 slug，创建时填写、不可修改）、
- * name、description、应用级 status。两类 facet（{@code ApiKey}/{@code SsoClient}）独立挂在 app 上、可空，
+ * name、description、应用级 status。两类凭证（{@code ApiKey}/{@code SsoClient}）独立挂在 app 上、可空，
  * 以 app 内部 {@code id} 关联。</p>
  *
  * <h3>状态机</h3>

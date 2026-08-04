@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 签名 facet 管理 REST API（挂在应用路径下，1:1）。
+ * ApiKey 管理 REST API（挂在应用路径下，1:1）。
  *
  * <p>加固说明：app-registry 只对内可达，网络边界即信任边界（ADR-0002 §9）。</p>
  *
@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/app-registry/apps/{appId}/api-keys")
 @RequireSignature
-@Tag(name = "ApiKeys", description = "签名 facet 管理（机机验签凭证）")
+@Tag(name = "ApiKeys", description = "ApiKey 管理（机机验签凭证）")
 public class ApiKeyController {
 
     private final ApiKeyAppService apiKeyAppService;
@@ -34,25 +34,25 @@ public class ApiKeyController {
     }
 
     @PostMapping
-    @Operation(summary = "创建或轮换签名 facet", description = "已有则轮换、否则新建；响应一次性返回明文 apiSecret")
+    @Operation(summary = "创建或轮换 ApiKey", description = "已有则轮换、否则新建；响应一次性返回明文 apiSecret")
     public ApiResponse<ApiKeyCreatedResponse> createOrRotate(@PathVariable Long appId) {
         return ApiResponse.ok(apiKeyAppService.createOrRotate(appId));
     }
 
     @GetMapping
-    @Operation(summary = "查询应用的签名 facet", description = "不返回明文 apiSecret")
+    @Operation(summary = "查询应用的 ApiKey", description = "不返回明文 apiSecret")
     public ApiResponse<ApiKeyResponse> get(@PathVariable Long appId) {
         return ApiResponse.ok(apiKeyAppService.getByAppId(appId));
     }
 
     @PutMapping("/disable")
-    @Operation(summary = "禁用签名 facet")
+    @Operation(summary = "禁用 ApiKey")
     public ApiResponse<ApiKeyResponse> disable(@PathVariable Long appId) {
         return ApiResponse.ok(apiKeyAppService.disable(appId));
     }
 
     @PutMapping("/enable")
-    @Operation(summary = "启用签名 facet")
+    @Operation(summary = "启用 ApiKey")
     public ApiResponse<ApiKeyResponse> enable(@PathVariable Long appId) {
         return ApiResponse.ok(apiKeyAppService.enable(appId));
     }

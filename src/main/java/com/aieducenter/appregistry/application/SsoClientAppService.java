@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Optional;
 
 /**
- * SSO facet 应用服务——创建/轮换、查询、禁用/启用，以及解析为 identity 消费契约 {@link SsoClientInfo}。
+ * SsoClient 应用服务——创建/轮换、查询、禁用/启用，以及解析为 identity 消费契约 {@link SsoClientInfo}。
  *
  * <p>明文 {@code client_secret} 仅在创建/轮换响应里返一次：生成（SecureRandom）→ 哈希（argon2）→
  * 入库 hash → 明文进响应。之后任何接口都不再返回明文（hash 不可逆）。</p>
@@ -53,9 +53,9 @@ public class SsoClientAppService {
     }
 
     /**
-     * 创建或轮换应用的 SSO facet（1:1，同一端点两用）。
+     * 创建或轮换应用的 SsoClient（1:1，同一端点两用）。
      *
-     * <p>已有活跃 facet → 原地轮换（换新 client_id + hash + 元数据，重置 ACTIVE）；否则新建。
+     * <p>已有活跃 SsoClient → 原地轮换（换新 client_id + hash + 元数据，重置 ACTIVE）；否则新建。
      * 响应一次性返回明文 {@code client_secret}。</p>
      */
     @Transactional
@@ -78,7 +78,7 @@ public class SsoClientAppService {
     }
 
     /**
-     * 查询应用的 SSO facet（不含明文 secret）。应用或 facet 不存在返 404。
+     * 查询应用的 SsoClient（不含明文 secret）。应用或 SsoClient 不存在返 404。
      */
     @Transactional(readOnly = true)
     public SsoClientResponse getByAppId(Long appId) {
@@ -87,7 +87,7 @@ public class SsoClientAppService {
     }
 
     /**
-     * 禁用 SSO facet。重复禁用返 409。
+     * 禁用 SsoClient。重复禁用返 409。
      */
     @Transactional
     public SsoClientResponse disable(Long appId) {
@@ -99,7 +99,7 @@ public class SsoClientAppService {
     }
 
     /**
-     * 启用 SSO facet。重复启用返 409。
+     * 启用 SsoClient。重复启用返 409。
      */
     @Transactional
     public SsoClientResponse enable(Long appId) {
@@ -111,7 +111,7 @@ public class SsoClientAppService {
     }
 
     /**
-     * 解析 {@code client_id} → identity 消费契约 {@link SsoClientInfo}（组合状态 = facet.status && app.status）。
+     * 解析 {@code client_id} → identity 消费契约 {@link SsoClientInfo}（组合状态 = SsoClient.status && app.status）。
      *
      * <p>供 bootstrap 端点 {@code GET /sso-clients/{clientId}}。app / client 任一禁用 → {@code active=false} 且
      * {@code clientSecretHash=null}（不返有效元数据）。active 时返 hash，identity 缓存 + 本地比对。</p>

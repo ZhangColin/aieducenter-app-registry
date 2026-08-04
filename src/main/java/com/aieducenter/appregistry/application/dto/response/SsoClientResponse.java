@@ -7,16 +7,16 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * SSO facet 查询/禁用/启用响应——<strong>不含</strong> {@code client_secret}（明文仅创建/轮换时返一次，
+ * SsoClient 查询/禁用/启用响应——<strong>不含</strong> {@code client_secret}（明文仅创建/轮换时返一次，
  * 见 {@link SsoClientCreatedResponse}；hash 仅 bootstrap 端点按需返）。
  *
- * @param id           SSO facet id
+ * @param id           SsoClient id
  * @param appId        所属应用 id
  * @param clientId     OIDC client_id
  * @param redirectUris 回调地址列表
  * @param scopes       授权范围
  * @param grants       授权类型
- * @param status       facet 状态
+ * @param status       凭证状态
  * @param statusName   状态中文名
  * @param createdAt    创建时间
  * @param updatedAt    更新时间

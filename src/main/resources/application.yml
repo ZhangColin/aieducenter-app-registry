@@ -20,7 +20,7 @@ spring:
     show-sql: false
 
 # cartisan-openapi 签名配置
-# app-registry 是签名 facet 的「登记处 + 数据源」，自身：
+# app-registry 是 ApiKey 的「登记处 + 数据源」，自身：
 #   1) 用 LocalApiKeyProvider 直读表（见 #4），不配置 apikey-service-url、不自调 HTTP；
 #   2) 不作为签名客户端出站调他方服务，故 cartisan.openapi.self.* 留空（默认）。
 # SignatureVerificationFilter 仍注册（对无 X-App-Id 的请求直接放行），无害。
@@ -28,7 +28,7 @@ cartisan:
   openapi:
     apikey-service-url:
 
-# 签名 facet 的 apiSecret AES-GCM 主密钥（ADR-0002 §2）。
+# 签名凭证的 apiSecret AES-GCM 主密钥（ADR-0002 §2）。
 # 必须由环境变量提供 Base64 编码的 32 字节（AES-256）密钥；缺失/非法 → 启动即失败（绝不静默降级）。
 # 生成示例：openssl rand -base64 32
 # 测试 profile（application-test.yml）内置测试密钥；生产/本地须显式设置此环境变量。

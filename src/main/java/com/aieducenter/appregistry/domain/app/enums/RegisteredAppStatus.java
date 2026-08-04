@@ -8,8 +8,8 @@ import jakarta.persistence.Converter;
  * 应用状态。
  *
  * <ul>
- *   <li>{@link #ACTIVE} - 启用：应用可正常使用其 facet。</li>
- *   <li>{@link #DISABLED} - 禁用：查询 facet 时 join app 校验，app 禁用则 facet 失效（ADR-0001 §5）。</li>
+ *   <li>{@link #ACTIVE} - 启用：应用可正常使用其凭证。</li>
+ *   <li>{@link #DISABLED} - 禁用：查询凭证时 join app 校验，app 禁用则凭证失效（ADR-0001 §5）。</li>
  * </ul>
  *
  * @since 0.1.0

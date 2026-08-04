@@ -5,13 +5,13 @@ import com.aieducenter.appregistry.domain.signature.enums.ApiKeyStatus;
 import java.time.LocalDateTime;
 
 /**
- * 签名 facet 查询/禁用/启用响应——<strong>不含</strong> {@code apiSecret} 明文
+ * ApiKey 查询/禁用/启用响应——<strong>不含</strong> {@code apiSecret} 明文
  * （明文仅创建/轮换时返一次，见 {@link ApiKeyCreatedResponse}）。
  *
- * @param id         签名 facet id
+ * @param id         ApiKey id
  * @param appId      所属应用 id
  * @param apiKey     凭证标识（= 框架 X-App-Id）
- * @param status     facet 状态
+ * @param status     凭证状态
  * @param statusName 状态中文名
  * @param createdAt  创建时间
  * @param updatedAt  更新时间

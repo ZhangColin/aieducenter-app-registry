@@ -22,14 +22,14 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * SSO facet 聚合根——OIDC client 元数据（供 identity IdP）。
+ * SsoClient 聚合根——OIDC client 元数据（供 identity IdP）。
  *
  * <p>1:1 挂在 {@code RegisteredApp} 上、可空。{@code client_id} = SecureRandom 生成、全局唯一、可完全轮换；
  * {@code client_secret} 以 <strong>argon2 hash</strong> 入库（hash-only，不可逆、永不返回明文）——
- * 与签名 facet 的 AES-GCM 可逆密文存储<strong>相反</strong>（ADR-0003 §2）。明文 {@code client_secret} 仅由
+ * 与 ApiKey 的 AES-GCM 可逆密文存储<strong>相反</strong>（ADR-0003 §2）。明文 {@code client_secret} 仅由
  * 应用层在创建/轮换时生成、哈希、返响应一次。</p>
  *
- * <p>{@code redirect_uri}（列表，保序）/ {@code scopes}（去重）/ {@code grants}（去重）以 JSONB 列存储，
+ * <p>{@code redirect_uris}（列表，保序）/ {@code scopes}（去重）/ {@code grants}（去重）以 JSONB 列存储，
  * 应用不多、不建关联表（ADR-0003 §8）。</p>
  *
  * <h3>状态机</h3>
@@ -39,8 +39,8 @@ import java.util.Set;
  * </ul>
  *
  * <h3>组合生效</h3>
- * <p>本聚合 status 仅是 facet 自身状态；SSO 是否放行由 {@code SsoClient.status && RegisteredApp.status}
- * 联合决定（app 禁用则 facet 失效）——该级联在 {@code SsoClientAppService}/bootstrap 端点查询时 join app 计算，
+ * <p>本聚合 status 仅表示自身状态；SSO 是否放行由 {@code SsoClient.status && RegisteredApp.status}
+ * 联合决定（app 禁用则凭证失效）——该级联在 {@code SsoClientAppService}/bootstrap 端点查询时 join app 计算，
  * 不在本聚合。</p>
  *
  * @since 0.1.0
@@ -69,7 +69,7 @@ public class SsoClient extends AuditableSoftDeletable implements AggregateRoot<S
 
     /** OIDC 回调地址（保序、可重复，jsonb array）。*/
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "redirect_uri", nullable = false)
+    @Column(name = "redirect_uris", nullable = false)
     private List<String> redirectUris = new ArrayList<>();
 
     /** 授权范围（去重，jsonb array）。*/
@@ -101,7 +101,7 @@ public class SsoClient extends AuditableSoftDeletable implements AggregateRoot<S
     }
 
     /**
-     * 创建 SSO facet（工厂）。{@code client_id}/hash/元数据由应用层生成（SecureRandom + argon2）后传入。
+     * 创建 SsoClient（工厂）。{@code client_id}/hash/元数据由应用层生成（SecureRandom + argon2）后传入。
      *
      * @param appId         所属应用 id
      * @param clientId      OIDC client_id（SecureRandom 生成）
@@ -109,7 +109,7 @@ public class SsoClient extends AuditableSoftDeletable implements AggregateRoot<S
      * @param redirectUris  回调地址列表（至少一个）
      * @param scopes        授权范围（可空 → 空 set）
      * @param grants        授权类型（可空 → 空 set）
-     * @return 新建的、尚未持久化的 SSO facet
+     * @return 新建的、尚未持久化的 SsoClient
      */
     public static SsoClient create(Long appId, String clientId, String hashedSecret,
                                    List<String> redirectUris, Set<String> scopes, Set<String> grants) {
@@ -142,7 +142,7 @@ public class SsoClient extends AuditableSoftDeletable implements AggregateRoot<S
     }
 
     /**
-     * 禁用 SSO facet。仅 ACTIVE 可禁用，重复禁用抛 409。
+     * 禁用 SsoClient。仅 ACTIVE 可禁用，重复禁用抛 409。
      */
     public void disable() {
         Assertions.require(status == SsoClientStatus.ACTIVE, AppRegistryMessage.SSO_CLIENT_ALREADY_DISABLED);
@@ -150,7 +150,7 @@ public class SsoClient extends AuditableSoftDeletable implements AggregateRoot<S
     }
 
     /**
-     * 启用 SSO facet。仅 DISABLED 可启用，重复启用抛 409。
+     * 启用 SsoClient。仅 DISABLED 可启用，重复启用抛 409。
      */
     public void enable() {
         Assertions.require(status == SsoClientStatus.DISABLED, AppRegistryMessage.SSO_CLIENT_ALREADY_ENABLED);

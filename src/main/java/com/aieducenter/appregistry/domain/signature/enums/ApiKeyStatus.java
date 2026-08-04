@@ -5,9 +5,9 @@ import com.cartisan.data.jpa.converter.BaseEnumConverter;
 import jakarta.persistence.Converter;
 
 /**
- * 签名 facet（ApiKey）状态。
+ * ApiKey 状态。
  *
- * <p>组合生效状态由 {@code ApiKey.status && RegisteredApp.status} 联合决定（app 禁用则 facet 失效），
+ * <p>组合生效状态由 {@code ApiKey.status && RegisteredApp.status} 联合决定（app 禁用则凭证失效），
  * 见 {@code LocalApiKeyProvider} / bootstrap 端点的级联逻辑。</p>
  *
  * @since 0.1.0

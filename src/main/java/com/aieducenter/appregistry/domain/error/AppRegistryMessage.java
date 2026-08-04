@@ -10,8 +10,8 @@ import com.cartisan.core.exception.CodeMessage;
  * <ul>
  *   <li>#3 app：app_code 撞名、状态转换冲突等（撞名主路径走
  *       {@link com.cartisan.core.exception.BaseCodeMessage#DUPLICATE}）</li>
- *   <li>#4 api-key：api_key 撞名、签名 facet 缺失等</li>
- *   <li>#5 sso-client：client_id 撞名、SSO facet 缺失等</li>
+ *   <li>#4 api-key：api_key 撞名、ApiKey 缺失等</li>
+ *   <li>#5 sso-client：client_id 撞名、SsoClient 缺失等</li>
  * </ul>
  *
  * <p>通用语义优先复用 {@link com.cartisan.core.exception.BaseCodeMessage}：
@@ -32,7 +32,7 @@ public enum AppRegistryMessage implements CodeMessage {
     /** 应用已启用，无法再次启用（{0}=appCode）。*/
     APP_ALREADY_ENABLED(409, "AR_APP_ALREADY_ENABLED", "应用已处于启用状态: {0}"),
 
-    // ===== ApiKey（签名 facet 聚合，#4）=====
+    // ===== ApiKey（签名凭证聚合，#4）=====
     /** 签名凭证已禁用，无法再次禁用。*/
     API_KEY_ALREADY_DISABLED(409, "AR_API_KEY_ALREADY_DISABLED", "签名凭证已处于禁用状态"),
     /** 签名凭证已启用，无法再次启用。*/
@@ -42,8 +42,8 @@ public enum AppRegistryMessage implements CodeMessage {
     /** 平台预置应用不可禁用（{0}=appCode）。*/
     ADMIN_CONSOLE_CANNOT_DISABLE(403, "AR_ADMIN_CONSOLE_CANNOT_DISABLE", "平台预置应用不可禁用: {0}"),
 
-    // ===== SsoClient（SSO facet 聚合，#5）=====
-    /** SSO 回调地址为空（至少一个 redirect_uri）。*/
+    // ===== SsoClient（SSO 凭证聚合，#5）=====
+    /** SSO 回调地址为空（至少一个 redirect_uri）。OIDC 标准字段 redirect_uris。*/
     SSO_REDIRECT_URI_REQUIRED(400, "AR_SSO_REDIRECT_URI_REQUIRED", "回调地址不能为空"),
     /** SSO 凭证已禁用，无法再次禁用。*/
     SSO_CLIENT_ALREADY_DISABLED(409, "AR_SSO_CLIENT_ALREADY_DISABLED", "SSO 凭证已处于禁用状态"),

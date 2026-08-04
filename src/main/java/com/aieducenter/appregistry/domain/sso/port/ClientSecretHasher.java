@@ -3,7 +3,7 @@ package com.aieducenter.appregistry.domain.sso.port;
 /**
  * SSO {@code client_secret} 单向哈希端口（南向）。
  *
- * <p>与签名 facet 的可逆加密（{@link com.aieducenter.appregistry.domain.signature.port.ApiSecretEncrypter}）
+ * <p>与 ApiKey 的可逆加密（{@link com.aieducenter.appregistry.domain.signature.port.ApiSecretEncrypter}）
  * 相反：SSO {@code client_secret} 必须 <strong>hash-only</strong>（不可逆）——DB 只存 hash，比对由 identity
  * 本地完成（{@code client_secret_post}：应用发明文、identity 比对 hash）。</p>
  *

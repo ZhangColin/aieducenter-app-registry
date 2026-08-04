@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Optional;
 
 /**
- * 签名 facet 应用服务——创建/轮换、查询、禁用/启用，以及解析为框架 {@link ApiKeyInfo}。
+ * ApiKey 应用服务——创建/轮换、查询、禁用/启用，以及解析为框架 {@link ApiKeyInfo}。
  *
  * <p>明文 {@code apiSecret} 仅在创建/轮换响应里返一次：生成（SecureRandom）→ 加密（AES-GCM）→
  * 入库密文 → 明文进响应。之后任何接口都不再返回明文。</p>
@@ -50,9 +50,9 @@ public class ApiKeyAppService {
     }
 
     /**
-     * 创建或轮换应用的签名 facet（1:1，同一端点两用）。
+     * 创建或轮换应用的 ApiKey（1:1，同一端点两用）。
      *
-     * <p>apiKey = app.getAppCode()（创建后不可变）。已有活跃 facet → 原地轮换（只换 secret，重置 ACTIVE）；
+     * <p>apiKey = app.getAppCode()（创建后不可变）。已有活跃 ApiKey → 原地轮换（只换 secret，重置 ACTIVE）；
      * 否则新建。响应一次性返回明文 {@code apiSecret}。</p>
      */
     @Transactional
@@ -74,7 +74,7 @@ public class ApiKeyAppService {
     }
 
     /**
-     * 查询应用的签名 facet（不含明文 secret）。应用或 facet 不存在返 404。
+     * 查询应用的 ApiKey（不含明文 secret）。应用或 ApiKey 不存在返 404。
      */
     @Transactional(readOnly = true)
     public ApiKeyResponse getByAppId(Long appId) {
@@ -83,7 +83,7 @@ public class ApiKeyAppService {
     }
 
     /**
-     * 禁用签名 facet。重复禁用返 409。admin-console 不可禁用。
+     * 禁用 ApiKey。重复禁用返 409。admin-console 不可禁用。
      */
     @Transactional
     public ApiKeyResponse disable(Long appId) {
@@ -96,7 +96,7 @@ public class ApiKeyAppService {
     }
 
     /**
-     * 启用签名 facet。重复启用返 409。
+     * 启用 ApiKey。重复启用返 409。
      */
     @Transactional
     public ApiKeyResponse enable(Long appId) {

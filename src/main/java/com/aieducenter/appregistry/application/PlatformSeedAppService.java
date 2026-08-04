@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 平台预置应用 seed——启动时确保 admin-console 应用及其签名 facet 存在。
+ * 平台预置应用 seed——启动时确保 admin-console 应用及其 ApiKey 存在。
  *
  * <p>触发时机：{@link org.springframework.boot.ApplicationRunner} 在应用启动后调用。
  * seed 逻辑幂等：主密钥未变时重复执行不产生副作用；主密钥轮换后自动检测并轮换 secret。</p>
@@ -42,7 +42,7 @@ public class PlatformSeedAppService {
     }
 
     /**
-     * 执行 seed：确保 admin-console 应用 + 签名 facet 存在且可用。
+     * 执行 seed：确保 admin-console 应用 + ApiKey 存在且可用。
      */
     @Transactional
     public void seed() {

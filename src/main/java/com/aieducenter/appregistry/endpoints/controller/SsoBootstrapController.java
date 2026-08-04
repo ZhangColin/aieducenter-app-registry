@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * SSO facet <strong>bootstrap 端点</strong>——需验签（identity 作为平台核心服务可预先持有签名凭证，无死锁）。
+ * SsoClient <strong>bootstrap 端点</strong>——需验签（identity 作为平台核心服务可预先持有签名凭证，无死锁）。
  *
  * <p>{@code GET /api/app-registry/sso-clients/{clientId}} 返 {@link SsoClientInfo}：active 时含
  * {@code client_secret} 的 <strong>hash</strong>（不含明文，hash-only 不变式）；app/client 任一禁用 →
@@ -23,14 +23,14 @@ import org.springframework.web.bind.annotation.RestController;
  * <p><strong>加固 = 网络隔离（只对内可达）</strong>：本端点无验签、无 bootstrap token / mTLS / IP allowlist——
  * app-registry 部署为只对内可达，网络边界即信任边界（ADR-0003 §9）。唯一调用方是可信的 identity 服务。</p>
  *
- * <p>与签名 facet {@code /api-keys/{apiKey}} 对称：拉取 + 缓存 + 本地验证；差异仅"返 hash 不返明文"。</p>
+ * <p>与 ApiKey {@code /api-keys/{apiKey}} 对称：拉取 + 缓存 + 本地验证；差异仅"返 hash 不返明文"。</p>
  *
  * @since 0.1.0
  */
 @RestController
 @RequestMapping("/api/app-registry/sso-clients")
 @RequireSignature
-@Tag(name = "Bootstrap", description = "SSO facet bootstrap 端点（需验签）")
+@Tag(name = "Bootstrap", description = "SsoClient bootstrap 端点（需验签）")
 public class SsoBootstrapController {
 
     private final SsoClientAppService ssoClientAppService;
@@ -40,7 +40,7 @@ public class SsoBootstrapController {
     }
 
     @GetMapping("/{clientId}")
-    @Operation(summary = "按 client_id 取 SSO facet（bootstrap）",
+    @Operation(summary = "按 client_id 取 SsoClient（bootstrap）",
             description = "返 SsoClientInfo（active 时含 client_secret hash；不含明文）")
     public ApiResponse<SsoClientInfo> getByClientId(@PathVariable String clientId) {
         SsoClientInfo info = ssoClientAppService.resolveSsoClientInfo(clientId)

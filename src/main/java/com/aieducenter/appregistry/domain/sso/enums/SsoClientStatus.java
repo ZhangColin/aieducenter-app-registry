@@ -5,9 +5,9 @@ import com.cartisan.data.jpa.converter.BaseEnumConverter;
 import jakarta.persistence.Converter;
 
 /**
- * SSO facet（SsoClient）状态。
+ * SsoClient 状态。
  *
- * <p>组合生效状态由 {@code SsoClient.status && RegisteredApp.status} 联合决定（app 禁用则 facet 失效），
+ * <p>组合生效状态由 {@code SsoClient.status && RegisteredApp.status} 联合决定（app 禁用则凭证失效），
  * 见 {@code SsoClientAppService.resolveSsoClientInfo} / bootstrap 端点的级联逻辑。</p>
  *
  * @since 0.1.0

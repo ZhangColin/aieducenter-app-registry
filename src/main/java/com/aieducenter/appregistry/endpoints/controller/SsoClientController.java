@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * SSO facet 管理 REST API（挂在应用路径下，1:1）。
+ * SsoClient 管理 REST API（挂在应用路径下，1:1）。
  *
  * <p>加固说明：app-registry 只对内可达，网络边界即信任边界（ADR-0003 §9）。</p>
  *
@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/app-registry/apps/{appId}/sso-clients")
 @RequireSignature
-@Tag(name = "SsoClients", description = "SSO facet 管理（OIDC client 元数据）")
+@Tag(name = "SsoClients", description = "SsoClient 管理（OIDC client 元数据）")
 public class SsoClientController {
 
     private final SsoClientAppService ssoClientAppService;
@@ -37,26 +37,26 @@ public class SsoClientController {
     }
 
     @PostMapping
-    @Operation(summary = "创建或轮换 SSO facet", description = "已有则轮换、否则新建；响应一次性返回明文 client_secret")
+    @Operation(summary = "创建或轮换 SsoClient", description = "已有则轮换、否则新建；响应一次性返回明文 client_secret")
     public ApiResponse<SsoClientCreatedResponse> createOrRotate(
             @PathVariable Long appId, @Valid @RequestBody CreateSsoClientCommand command) {
         return ApiResponse.ok(ssoClientAppService.createOrRotate(appId, command));
     }
 
     @GetMapping
-    @Operation(summary = "查询应用的 SSO facet", description = "不返回明文 client_secret")
+    @Operation(summary = "查询应用的 SsoClient", description = "不返回明文 client_secret")
     public ApiResponse<SsoClientResponse> get(@PathVariable Long appId) {
         return ApiResponse.ok(ssoClientAppService.getByAppId(appId));
     }
 
     @PutMapping("/disable")
-    @Operation(summary = "禁用 SSO facet")
+    @Operation(summary = "禁用 SsoClient")
     public ApiResponse<SsoClientResponse> disable(@PathVariable Long appId) {
         return ApiResponse.ok(ssoClientAppService.disable(appId));
     }
 
     @PutMapping("/enable")
-    @Operation(summary = "启用 SSO facet")
+    @Operation(summary = "启用 SsoClient")
     public ApiResponse<SsoClientResponse> enable(@PathVariable Long appId) {
         return ApiResponse.ok(ssoClientAppService.enable(appId));
     }

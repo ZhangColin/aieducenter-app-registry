@@ -32,10 +32,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * SSO facet 端到端测试——MockMvc + 真实 PG，@Transactional 每用例回滚。
+ * SsoClient 端到端测试——MockMvc + 真实 PG，@Transactional 每用例回滚。
  *
  * <p>注：{@code client_id} 撞名 409 走 SecureRandom 生成路径无法经 API 触发（碰撞概率可忽略），
- * 其应用层安全性由 {@code existsByClientId}（native，看含软删全行，同 #3 app_code / #4 api_key 同款已证）保证；
+ * 其应用层安全性由 {@code existsByClientId}（native，看含软删全行，同 app_code / api_key 同款已证）保证；
  * DB 兜底（普通唯一约束 → DuplicateKeyException → 409）在本类用 jdbcTemplate 实测（见
  * {@link #givenDuplicateClientIdRow_whenInsert_thenUniqueConstraintEnforced()}）。</p>
  *
@@ -70,7 +70,7 @@ class SsoClientControllerTest extends ApiTestBase {
     }
 
     @Test
-    void givenAppWithoutFacet_whenCreate_thenReturnsPlaintextOnceAndStoresHash() throws Exception {
+    void givenAppWithoutSsoClient_whenCreate_thenReturnsPlaintextOnceAndStoresHash() throws Exception {
         long appId = createApp("sso-app");
 
         CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, SCOPES, GRANTS);
@@ -107,13 +107,13 @@ class SsoClientControllerTest extends ApiTestBase {
 
         // JSON 列 DB 断言：jsonb 数组写入正确
         Integer uriCount = jdbcTemplate.queryForObject(
-                "SELECT jsonb_array_length(redirect_uri) FROM ar_sso_clients WHERE app_id = ? AND deleted = false",
+                "SELECT jsonb_array_length(redirect_uris) FROM ar_sso_clients WHERE app_id = ? AND deleted = false",
                 Integer.class, appId);
         assertThat(uriCount).isEqualTo(2);
     }
 
     @Test
-    void givenExistingFacet_whenGet_thenNoPlaintextSecret() throws Exception {
+    void givenExistingSsoClient_whenGet_thenNoPlaintextSecret() throws Exception {
         long appId = createApp("sso-app");
         String clientId = createClient(appId);
 
@@ -182,7 +182,7 @@ class SsoClientControllerTest extends ApiTestBase {
     }
 
     @Test
-    void givenFacetDisabled_whenBootstrap_thenInactiveAndHashWithheld() throws Exception {
+    void givenSsoClientDisabled_whenBootstrap_thenInactiveAndHashWithheld() throws Exception {
         long appId = createApp("sso-app");
         String clientId = createClient(appId);
 
@@ -197,7 +197,7 @@ class SsoClientControllerTest extends ApiTestBase {
     }
 
     @Test
-    void givenExistingFacet_whenRotate_thenNewCredentialsAndMetadataAndOldClientIdGone() throws Exception {
+    void givenExistingSsoClient_whenRotate_thenNewCredentialsAndMetadataAndOldClientIdGone() throws Exception {
         long appId = createApp("sso-app");
         String[] first = createClientWithSecret(appId);
         String oldClientId = first[0];
@@ -255,7 +255,7 @@ class SsoClientControllerTest extends ApiTestBase {
     }
 
     @Test
-    void givenAppWithoutFacet_whenGet_then404() throws Exception {
+    void givenAppWithoutSsoClient_whenGet_then404() throws Exception {
         long appId = createApp("sso-app");
 
         mvc.perform(signer.sign(get("/api/app-registry/apps/{appId}/sso-clients", appId), null))
@@ -271,7 +271,7 @@ class SsoClientControllerTest extends ApiTestBase {
     }
 
     @Test
-    void givenDisabledFacet_whenDisableAgain_then409() throws Exception {
+    void givenDisabledSsoClient_whenDisableAgain_then409() throws Exception {
         long appId = createApp("sso-app");
         createClient(appId);
 
@@ -291,7 +291,7 @@ class SsoClientControllerTest extends ApiTestBase {
     @Test
     void givenDuplicateClientIdRow_whenInsert_thenUniqueConstraintEnforced() {
         // client_id 撞名的 DB 兜底：普通唯一约束 → DuplicateKeyException（全局异常 → 409）。
-        // 应用层先查路径（existsByClientId native）同 #3 app_code / #4 api_key 同款已证。
+        // 应用层先查路径（existsByClientId native）同 app_code / api_key 同款已证。
         // 注：PG 事务内一次约束违例后整事务 aborted（25P02），故活跃/软删两场景分两个测试方法。
         insertFkTargetApp();
         insertSsoClientRow(900001, "taken-client-id", false);
@@ -318,7 +318,7 @@ class SsoClientControllerTest extends ApiTestBase {
     }
 
     private void insertSsoClientRow(long id, String clientId, boolean deleted) {
-        jdbcTemplate.update("INSERT INTO ar_sso_clients (id, app_id, client_id, client_secret, redirect_uri, scopes, grants, "
+        jdbcTemplate.update("INSERT INTO ar_sso_clients (id, app_id, client_id, client_secret, redirect_uris, scopes, grants, "
                 + "status, created_at, updated_at, deleted) VALUES (?, 900001, ?, 'hash', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, "
                 + "1, now(), now(), ?)", id, clientId, deleted);
     }

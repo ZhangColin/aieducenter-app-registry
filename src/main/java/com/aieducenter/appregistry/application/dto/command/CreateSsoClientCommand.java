@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 创建 SSO facet 命令（也用于轮换：整份替换 client_id/client_secret + 元数据）。
+ * 创建 SsoClient 命令（也用于轮换：整份替换 client_id/client_secret + 元数据）。
  *
  * @param redirectUris 回调地址列表（至少一个）；OIDC redirect_uri
  * @param scopes       授权范围（可空 → 空 set）

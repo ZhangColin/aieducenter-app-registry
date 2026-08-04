@@ -26,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 签名 facet 端到端测试——MockMvc + 真实 PG，@Transactional 每用例回滚。
+ * 签名 ApiKey 端到端测试——MockMvc + 真实 PG，@Transactional 每用例回滚。
  *
  * @since 0.1.0
  */
@@ -57,7 +57,7 @@ class ApiKeyControllerTest extends ApiTestBase {
     }
 
     @Test
-    void givenAppWithoutFacet_whenCreate_thenReturnsPlaintextOnceAndStoresCiphertext() throws Exception {
+    void givenAppWithoutApiKey_whenCreate_thenReturnsPlaintextOnceAndStoresCiphertext() throws Exception {
         long appId = createApp("payment-service");
 
         String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/api-keys", appId), null))
@@ -85,7 +85,7 @@ class ApiKeyControllerTest extends ApiTestBase {
     }
 
     @Test
-    void givenExistingFacet_whenGet_thenNoPlaintextSecret() throws Exception {
+    void givenExistingApiKey_whenGet_thenNoPlaintextSecret() throws Exception {
         long appId = createApp("payment-service");
         String apiKey = createKey(appId);
 
@@ -114,11 +114,11 @@ class ApiKeyControllerTest extends ApiTestBase {
     }
 
     @Test
-    void givenAppOrFacetDisabled_whenBootstrap_then404() throws Exception {
+    void givenAppOrApiKeyDisabled_whenBootstrap_then404() throws Exception {
         long appId = createApp("payment-service");
         String apiKey = createKey(appId);
 
-        // 禁用 facet → bootstrap 返回 404（框架视为不可用）
+        // 禁用 ApiKey → bootstrap 返回 404（框架视为不可用）
         mvc.perform(signer.sign(put("/api/app-registry/apps/{appId}/api-keys/disable", appId), null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value(0));
@@ -127,7 +127,7 @@ class ApiKeyControllerTest extends ApiTestBase {
         mvc.perform(get("/api/app-registry/api-keys/{apiKey}", apiKey))
                 .andExpect(status().isNotFound());
 
-        // 重新启用 facet → 恢复可查
+        // 重新启用 ApiKey → 恢复可查
         mvc.perform(signer.sign(put("/api/app-registry/apps/{appId}/api-keys/enable", appId), null))
                 .andExpect(status().isOk());
 
@@ -155,7 +155,7 @@ class ApiKeyControllerTest extends ApiTestBase {
     }
 
     @Test
-    void givenExistingFacet_whenRotate_thenSecretChangesAndApiKeyUnchanged() throws Exception {
+    void givenExistingApiKey_whenRotate_thenSecretChangesAndApiKeyUnchanged() throws Exception {
         long appId = createApp("payment-service");
         String[] first = createKeyWithSecret(appId);
         String oldApiKey = first[0];

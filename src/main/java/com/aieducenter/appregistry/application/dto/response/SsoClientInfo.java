@@ -4,9 +4,9 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * SSO facet <strong>bootstrap 契约</strong>——identity（IdP）拉取消费的 client 元数据。
+ * SsoClient <strong>bootstrap 契约</strong>——identity（IdP）拉取消费的 client 元数据。
  *
- * <p>与签名 facet 的 {@code ApiKeyInfo} 消费模式对称（拉取 + 缓存 + 本地验证）；差异仅"返 hash 不返明文"
+ * <p>与 ApiKey 的 {@code ApiKeyInfo} 消费模式对称（拉取 + 缓存 + 本地验证）；差异仅"返 hash 不返明文"
  * （hash-only 不变式使然，ADR-0003 §4）。identity 拿到后：缓存 + 对应用发来的明文 client_secret 做
  * {@code client_secret_post} 比对（用 hash）。</p>
  *
