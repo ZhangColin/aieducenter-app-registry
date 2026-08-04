@@ -170,6 +170,74 @@ class AppControllerTest extends ApiTestBase {
                 .andExpect(ApiTestAssertions.assertError(404));
     }
 
+    // ---- list (paginated) ----
+
+    @Test
+    void givenMultipleApps_whenList_thenReturnPagedContent() throws Exception {
+        createApp("svc-a");
+        createApp("svc-b");
+        createApp("svc-c");
+
+        mvc.perform(signer.sign(get("/api/app-registry/apps")
+                        .param("page", "0")
+                        .param("size", "2"), null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.total").value(4))
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.size").value(2))
+                .andExpect(jsonPath("$.items[0].appCode").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].apiSecret").doesNotExist());
+    }
+
+    @Test
+    void givenKeyword_whenList_thenFilterByAppCodeAndName() throws Exception {
+        createApp("payment-service");
+        createApp("order-service");
+        createApp("other-app");
+
+        mvc.perform(signer.sign(get("/api/app-registry/apps")
+                        .param("keyword", "payment"), null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].appCode").value("payment-service"));
+    }
+
+    @Test
+    void givenStatusFilter_whenList_thenReturnMatchingOnly() throws Exception {
+        long id = createApp("payment-service");
+        createApp("order-service");
+
+        // 禁用 payment-service
+        mvc.perform(signer.sign(put("/api/app-registry/apps/{id}/disable", id), null))
+                .andExpect(status().isOk());
+
+        // 查禁用
+        mvc.perform(signer.sign(get("/api/app-registry/apps")
+                        .param("status", "0"), null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].appCode").value("payment-service"));
+
+        // 查启用
+        mvc.perform(signer.sign(get("/api/app-registry/apps")
+                        .param("status", "1"), null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2));
+    }
+
+    @Test
+    void givenNoParams_whenList_thenReturnAll() throws Exception {
+        createApp("svc-a");
+        createApp("svc-b");
+
+        mvc.perform(signer.sign(get("/api/app-registry/apps"), null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(3))
+                .andExpect(jsonPath("$.total").value(3))
+                .andExpect(jsonPath("$.size").value(20));
+    }
+
     @Test
     void givenNoSignature_whenCallRequireSignatureEndpoint_then401() throws Exception {
         // 对 @RequireSignature 端点发无签名请求 → 拦截器返回 401

@@ -1,6 +1,7 @@
 package com.aieducenter.appregistry.application;
 
 import com.aieducenter.appregistry.application.dto.command.CreateAppCommand;
+import com.aieducenter.appregistry.application.dto.query.AppQuery;
 import com.aieducenter.appregistry.application.dto.response.AppResponse;
 import com.aieducenter.appregistry.application.mapper.RegisteredAppMapper;
 import com.aieducenter.appregistry.domain.app.aggregate.RegisteredApp;
@@ -9,6 +10,10 @@ import com.aieducenter.appregistry.domain.error.AppRegistryMessage;
 import com.cartisan.core.exception.BaseCodeMessage;
 import com.cartisan.core.exception.DomainException;
 import com.cartisan.core.util.Assertions;
+import com.cartisan.data.jpa.specification.ConditionSpecifications;
+import com.cartisan.web.response.PageResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -78,6 +83,20 @@ public class RegisteredAppAppService {
         app.enable();
         appRepository.saveAndFlush(app);
         return appMapper.convert(app);
+    }
+
+    /**
+     * 分页查询应用列表。支持 keyword（appCode + name 模糊）和 status 筛选。
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<AppResponse> list(AppQuery query, Pageable pageable) {
+        Page<RegisteredApp> page = appRepository.findAll(
+                ConditionSpecifications.fromAnnotation(query), pageable);
+        return new PageResponse<>(
+                page.map(appMapper::convert).getContent(),
+                page.getTotalElements(),
+                pageable.getPageNumber() + 1,
+                pageable.getPageSize());
     }
 
     private RegisteredApp loadApp(Long id) {

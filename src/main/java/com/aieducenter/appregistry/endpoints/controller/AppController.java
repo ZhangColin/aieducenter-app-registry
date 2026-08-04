@@ -2,12 +2,16 @@ package com.aieducenter.appregistry.endpoints.controller;
 
 import com.aieducenter.appregistry.application.RegisteredAppAppService;
 import com.aieducenter.appregistry.application.dto.command.CreateAppCommand;
+import com.aieducenter.appregistry.application.dto.query.AppQuery;
 import com.aieducenter.appregistry.application.dto.response.AppResponse;
 import com.cartisan.openapi.annotation.RequireSignature;
 import com.cartisan.web.response.ApiResponse;
+import com.cartisan.web.response.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -48,6 +52,13 @@ public class AppController {
     @Operation(summary = "查询应用详情")
     public ApiResponse<AppResponse> getById(@PathVariable Long id) {
         return ApiResponse.ok(appService.findById(id));
+    }
+
+    @GetMapping
+    @Operation(summary = "分页查询应用列表")
+    public PageResponse<AppResponse> list(AppQuery query,
+                                          @PageableDefault(size = 20) Pageable pageable) {
+        return appService.list(query, pageable);
     }
 
     @PutMapping("/{id}/disable")
