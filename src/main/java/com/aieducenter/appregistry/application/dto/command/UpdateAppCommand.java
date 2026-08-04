@@ -1,5 +1,6 @@
 package com.aieducenter.appregistry.application.dto.command;
 
+import com.aieducenter.appregistry.domain.app.aggregate.RegisteredApp;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -12,10 +13,10 @@ import jakarta.validation.constraints.Size;
 public record UpdateAppCommand(
 
         @NotBlank(message = "应用名称不能为空")
-        @Size(max = 128, message = "应用名称长度不能超过 128")
+        @Size(max = RegisteredApp.NAME_MAX_LENGTH, message = "应用名称长度不能超过 128")
         String name,
 
-        @Size(max = 512, message = "应用描述长度不能超过 512")
+        @Size(max = RegisteredApp.DESCRIPTION_MAX_LENGTH, message = "应用描述长度不能超过 512")
         String description
 ) {
 }

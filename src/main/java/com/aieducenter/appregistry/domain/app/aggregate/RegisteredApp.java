@@ -47,6 +47,12 @@ public class RegisteredApp extends AuditableSoftDeletable implements AggregateRo
     /** app_code slug 规则：4-64 位小写字母/数字/连字符，不以连字符开头或结尾。 */
     static final String APP_CODE_PATTERN = "^[a-z0-9][a-z0-9-]{2,62}[a-z0-9]$";
 
+    /** 应用名称最大长度（与 DB {@code name} 列 / DTO @Size 保持一致）。 */
+    public static final int NAME_MAX_LENGTH = 128;
+
+    /** 应用描述最大长度（与 DB {@code description} 列 / DTO @Size 保持一致）。 */
+    public static final int DESCRIPTION_MAX_LENGTH = 512;
+
     @Id
     @Column(name = "id", nullable = false, updatable = false)
     private Long id;
@@ -54,10 +60,10 @@ public class RegisteredApp extends AuditableSoftDeletable implements AggregateRo
     @Column(name = "app_code", nullable = false, updatable = false, length = 64)
     private String appCode;
 
-    @Column(name = "name", nullable = false, length = 128)
+    @Column(name = "name", nullable = false, length = NAME_MAX_LENGTH)
     private String name;
 
-    @Column(name = "description", length = 512)
+    @Column(name = "description", length = DESCRIPTION_MAX_LENGTH)
     private String description;
 
     @Column(name = "status", nullable = false)
