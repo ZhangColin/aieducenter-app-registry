@@ -175,6 +175,7 @@ class AppControllerTest extends ApiTestBase {
 
     @Test
     void givenMultipleApps_whenList_thenReturnPagedContent() throws Exception {
+        int baseline = countApps(); // 含 seed（identity）与签名 caller——让 total 断言对 seed 行免疫
         createApp("svc-a");
         createApp("svc-b");
         createApp("svc-c");
@@ -184,7 +185,7 @@ class AppControllerTest extends ApiTestBase {
                         .param("size", "2"), null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(2))
-                .andExpect(jsonPath("$.total").value(4))
+                .andExpect(jsonPath("$.total").value(baseline + 3))
                 .andExpect(jsonPath("$.page").value(1))
                 .andExpect(jsonPath("$.size").value(2))
                 .andExpect(jsonPath("$.items[0].appCode").isNotEmpty())
@@ -206,6 +207,8 @@ class AppControllerTest extends ApiTestBase {
 
     @Test
     void givenStatusFilter_whenList_thenReturnMatchingOnly() throws Exception {
+        int baselineEnabled = countByStatus(1); // 含 seed（identity）与签名 caller
+        int baselineDisabled = countByStatus(0);
         long id = createApp("payment-service");
         createApp("order-service");
 
@@ -217,25 +220,26 @@ class AppControllerTest extends ApiTestBase {
         mvc.perform(signer.sign(get("/api/app-registry/apps")
                         .param("status", "0"), null))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items.length()").value(baselineDisabled + 1))
                 .andExpect(jsonPath("$.items[0].appCode").value("payment-service"));
 
         // 查启用
         mvc.perform(signer.sign(get("/api/app-registry/apps")
                         .param("status", "1"), null))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items.length()").value(2));
+                .andExpect(jsonPath("$.items.length()").value(baselineEnabled + 1));
     }
 
     @Test
     void givenNoParams_whenList_thenReturnAll() throws Exception {
+        int baseline = countApps();
         createApp("svc-a");
         createApp("svc-b");
 
         mvc.perform(signer.sign(get("/api/app-registry/apps"), null))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items.length()").value(3))
-                .andExpect(jsonPath("$.total").value(3))
+                .andExpect(jsonPath("$.items.length()").value(baseline + 2))
+                .andExpect(jsonPath("$.total").value(baseline + 2))
                 .andExpect(jsonPath("$.size").value(20));
     }
 
@@ -338,5 +342,20 @@ class AppControllerTest extends ApiTestBase {
                 .andReturn().getResponse().getContentAsString();
         JsonNode node = objectMapper.readTree(body);
         return node.path("data").path("id").asLong();
+    }
+
+    /** 未软删应用总数（含 seed 与签名 caller）——分页 total 断言的基线，使其对 seed 行免疫。*/
+    private int countApps() {
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ar_registered_apps WHERE deleted = false", Long.class);
+        return count != null ? count.intValue() : 0;
+    }
+
+    /** 按状态统计未软删应用数（1=启用 / 0=禁用）。*/
+    private int countByStatus(int status) {
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ar_registered_apps WHERE deleted = false AND status = ?",
+                Long.class, status);
+        return count != null ? count.intValue() : 0;
     }
 }
