@@ -194,15 +194,16 @@ class AppControllerTest extends ApiTestBase {
 
     @Test
     void givenKeyword_whenList_thenFilterByAppCodeAndName() throws Exception {
-        createApp("payment-service");
+        // 用不与平台 seed（identity/payment）碰撞的 keyword，保证过滤结果对 seed 行免疫。
+        createApp("checkout-svc");
         createApp("order-service");
         createApp("other-app");
 
         mvc.perform(signer.sign(get("/api/app-registry/apps")
-                        .param("keyword", "payment"), null))
+                        .param("keyword", "checkout"), null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(1))
-                .andExpect(jsonPath("$.items[0].appCode").value("payment-service"));
+                .andExpect(jsonPath("$.items[0].appCode").value("checkout-svc"));
     }
 
     @Test
