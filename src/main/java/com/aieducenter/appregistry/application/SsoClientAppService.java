@@ -1,6 +1,6 @@
 package com.aieducenter.appregistry.application;
 
-import com.aieducenter.appregistry.application.dto.command.CreateSsoClientCommand;
+import com.aieducenter.appregistry.application.dto.command.UpdateSsoClientConfigCommand;
 import com.aieducenter.appregistry.application.dto.response.SsoClientCreatedResponse;
 import com.aieducenter.appregistry.application.dto.response.SsoClientInfo;
 import com.aieducenter.appregistry.application.dto.response.SsoClientResponse;
@@ -22,10 +22,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Optional;
 
 /**
- * SsoClient 应用服务——创建/轮换、查询、禁用/启用，以及解析为 identity 消费契约 {@link SsoClientInfo}。
+ * SsoClient 应用服务——配置与凭证职责分离（ADR-0005）：凭证接口（创建 / 重置）、配置 PUT、查询、禁用/启用，
+ * 以及解析为 identity 消费契约 {@link SsoClientInfo}。
  *
- * <p>明文 {@code client_secret} 仅在创建/轮换响应里返一次：生成（SecureRandom）→ 哈希（argon2）→
- * 入库 hash → 明文进响应。之后任何接口都不再返回明文（hash 不可逆）。</p>
+ * <p>明文 {@code client_secret} 仅在凭证接口响应里返一次：生成（SecureRandom）→ 哈希（argon2）→
+ * 入库 hash → 明文进响应。之后任何接口都不再返回明文（hash 不可逆）。{@code client_id} 终身稳定——
+ * 凭证重置只换 {@code client_secret}、不改 {@code client_id}；改配置更不触碰任何凭证。</p>
  *
  * <p>{@link #resolveSsoClientInfo(String)} 服务 bootstrap 端点 {@code GET /sso-clients/{clientId}}：
  * 按 {@code client_id} 查、join app 算组合状态（{@code client.status && app.status}）、active 时返 hash、
@@ -53,28 +55,45 @@ public class SsoClientAppService {
     }
 
     /**
-     * 创建或轮换应用的 SsoClient（1:1，同一端点两用）。
+     * 生成或重置应用 SsoClient 的凭证（1:1，同一端点两用）。
      *
-     * <p>已有活跃 SsoClient → 原地轮换（换新 client_id + hash + 元数据，重置 ACTIVE）；否则新建。
-     * 响应一次性返回明文 {@code client_secret}。</p>
+     * <p>无 SsoClient → <strong>创建</strong>（SecureRandom 生成 {@code client_id} + 明文 {@code client_secret} →
+     * argon2 hash 入库，配置初始为空）；已有 SsoClient → <strong>仅重置 {@code client_secret}</strong>
+     * （{@code client_id} 终身稳定、status 不变）。响应一次性返回明文 {@code client_secret}。</p>
      */
     @Transactional
-    public SsoClientCreatedResponse createOrRotate(Long appId, CreateSsoClientCommand command) {
+    public SsoClientCreatedResponse generateOrResetCredentials(Long appId) {
         loadApp(appId);
-        Generated generated = generateUnique();
-
         Optional<SsoClient> existing = ssoClientRepository.findByAppId(appId);
+        String plaintextSecret;
         SsoClient client;
         if (existing.isPresent()) {
+            // 重置：只换 secret，client_id 终身稳定（ADR-0005）
             client = existing.get();
-            client.rotate(generated.clientId(), hasher.hash(generated.clientSecret()),
-                    command.redirectUris(), command.postLogoutRedirectUris(), command.scopes(), command.grants());
+            plaintextSecret = SsoCredentials.generateSecret();
+            client.resetCredentials(hasher.hash(plaintextSecret));
         } else {
-            client = SsoClient.create(appId, generated.clientId(), hasher.hash(generated.clientSecret()),
-                    command.redirectUris(), command.postLogoutRedirectUris(), command.scopes(), command.grants());
+            // 创建：client_id 撞名检测 + secret 一起生成
+            Generated generated = generateUnique();
+            plaintextSecret = generated.clientSecret();
+            client = SsoClient.create(appId, generated.clientId(), hasher.hash(plaintextSecret));
         }
         ssoClientRepository.saveAndFlush(client);
-        return mapper.toCreated(client, generated.clientSecret());
+        return mapper.toCreated(client, plaintextSecret);
+    }
+
+    /**
+     * 整份替换 SsoClient 配置（{@code redirect_uris} / {@code post_logout_redirect_uris} / {@code scopes} /
+     * {@code grants}）。<strong>不动凭证、不动 status</strong>；SsoClient 不存在 → 404。
+     */
+    @Transactional
+    public SsoClientResponse updateConfig(Long appId, UpdateSsoClientConfigCommand command) {
+        loadApp(appId);
+        SsoClient client = loadClientByApp(appId);
+        client.updateConfig(command.redirectUris(), command.postLogoutRedirectUris(),
+                command.scopes(), command.grants());
+        ssoClientRepository.saveAndFlush(client);
+        return mapper.convert(client);
     }
 
     /**

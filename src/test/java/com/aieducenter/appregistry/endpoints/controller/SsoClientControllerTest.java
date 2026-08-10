@@ -1,7 +1,7 @@
 package com.aieducenter.appregistry.endpoints.controller;
 
 import com.aieducenter.appregistry.application.dto.command.CreateAppCommand;
-import com.aieducenter.appregistry.application.dto.command.CreateSsoClientCommand;
+import com.aieducenter.appregistry.application.dto.command.UpdateSsoClientConfigCommand;
 import com.aieducenter.appregistry.common.TestSignatureHelper;
 import com.aieducenter.appregistry.domain.signature.port.ApiSecretEncrypter;
 import com.cartisan.test.base.ApiTestAssertions;
@@ -33,6 +33,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * SsoClient 端到端测试——MockMvc + 真实 PG，@Transactional 每用例回滚。
+ *
+ * <p>覆盖 ADR-0005 配置/凭证职责分离契约：凭证接口（{@code POST /credentials}：创建 / 重置，{@code client_id}
+ * 终身稳定）+ 配置 PUT（整份替换配置、不动凭证、不动 status）。核心回归：连续两次配置 PUT，{@code client_id} 与
+ * {@code client_secret} 逐字节不变。</p>
  *
  * <p>注：{@code client_id} 撞名 409 走 SecureRandom 生成路径无法经 API 触发（碰撞概率可忽略），
  * 其应用层安全性由 {@code existsByClientId}（native，看含软删全行，同 app_code / api_key 同款已证）保证；
@@ -71,25 +75,24 @@ class SsoClientControllerTest extends ApiTestBase {
         signer = TestSignatureHelper.setupCaller(jdbcTemplate, encrypter);
     }
 
+    // ===== 凭证接口 POST /credentials =====
+
     @Test
-    void givenAppWithoutSsoClient_whenCreate_thenReturnsPlaintextOnceAndStoresHash() throws Exception {
+    void givenAppWithoutSsoClient_whenCredentials_thenCreatesAndReturnsPlaintextOnceWithEmptyConfig() throws Exception {
         long appId = createApp("sso-app");
 
-        CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
-        String json = ApiTestAssertions.toJson(command);
-        String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json), json))
+        // 凭证接口无请求体；创建时配置为空（配置由 PUT 单独编排，ADR-0005）
+        String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients/credentials", appId), null))
                 .andExpect(status().isOk())
                 .andExpect(ApiTestAssertions.assertOk())
                 .andExpect(jsonPath("$.data.appId").value(appId))
                 .andExpect(jsonPath("$.data.status").value(1))
                 .andExpect(jsonPath("$.data.clientId").isString())
                 .andExpect(jsonPath("$.data.clientSecret").isString())
-                .andExpect(jsonPath("$.data.redirectUris.length()").value(2))
-                .andExpect(jsonPath("$.data.postLogoutRedirectUris.length()").value(2))
-                .andExpect(jsonPath("$.data.scopes.length()").value(2))
-                .andExpect(jsonPath("$.data.grants.length()").value(2))
+                .andExpect(jsonPath("$.data.redirectUris.length()").value(0))
+                .andExpect(jsonPath("$.data.postLogoutRedirectUris.length()").value(0))
+                .andExpect(jsonPath("$.data.scopes.length()").value(0))
+                .andExpect(jsonPath("$.data.grants.length()").value(0))
                 .andReturn().getResponse().getContentAsString();
 
         JsonNode data = objectMapper.readTree(body).path("data");
@@ -99,25 +102,166 @@ class SsoClientControllerTest extends ApiTestBase {
         assertThat(plaintextSecret).isNotBlank();
         assertThat(plaintextSecret).isNotEqualTo(clientId);
 
-        // DB 断言：存的是 argon2 hash（非明文、hash-only），且 hash 能比对回明文（identity 侧同款验证）
-        String stored = jdbcTemplate.queryForObject(
-                "SELECT client_secret FROM ar_sso_clients WHERE app_id = ? AND deleted = false",
-                String.class, appId);
+        // DB 断言：存的是 argon2 hash（非明文、hash-only），hash 能比对回明文
+        String stored = dbClientSecret(appId);
         assertThat(stored).isNotEqualTo(plaintextSecret);
         assertThat(stored).startsWith("$argon2");
-        Argon2PasswordEncoder verifier = Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8();
-        assertThat(verifier.matches(plaintextSecret, stored)).isTrue();
+        assertThat(verifier().matches(plaintextSecret, stored)).isTrue();
 
-        // JSON 列 DB 断言：jsonb 数组写入正确（redirect_uris + post_logout_redirect_uris 保序存）
-        Integer uriCount = jdbcTemplate.queryForObject(
-                "SELECT jsonb_array_length(redirect_uris) FROM ar_sso_clients WHERE app_id = ? AND deleted = false",
-                Integer.class, appId);
-        assertThat(uriCount).isEqualTo(2);
-        Integer postLogoutCount = jdbcTemplate.queryForObject(
-                "SELECT jsonb_array_length(post_logout_redirect_uris) FROM ar_sso_clients WHERE app_id = ? AND deleted = false",
-                Integer.class, appId);
-        assertThat(postLogoutCount).isEqualTo(2);
+        // DB 断言：配置列初始为空 jsonb 数组（凭证接口不校验/不写配置）
+        assertThat(jsonbLength("redirect_uris", appId)).isZero();
+        assertThat(jsonbLength("post_logout_redirect_uris", appId)).isZero();
     }
+
+    @Test
+    void givenExistingSsoClient_whenCredentials_thenResetsSecretAndClientIdStable() throws Exception {
+        long appId = createApp("sso-app");
+        String[] first = credentialsOnly(appId);
+        String oldClientId = first[0];
+        String oldPlaintext = first[1];
+
+        // 第二次调凭证接口 = 重置：client_id 终身稳定、只换 client_secret
+        String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients/credentials", appId), null))
+                .andExpect(status().isOk())
+                .andExpect(ApiTestAssertions.assertOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode data = objectMapper.readTree(body).path("data");
+        String newClientId = data.path("clientId").asText();
+        String newPlaintext = data.path("clientSecret").asText();
+
+        assertThat(newClientId).isEqualTo(oldClientId);
+        assertThat(newPlaintext).isNotEqualTo(oldPlaintext);
+
+        // 重置后的 hash 仍比对回新明文（非旧明文）
+        String stored = dbClientSecret(appId);
+        assertThat(verifier().matches(newPlaintext, stored)).isTrue();
+        assertThat(verifier().matches(oldPlaintext, stored)).isFalse();
+    }
+
+    @Test
+    void givenMissingApp_whenCredentials_then404() throws Exception {
+        mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients/credentials", 77777777777L), null))
+                .andExpect(status().isNotFound())
+                .andExpect(ApiTestAssertions.assertError(404));
+    }
+
+    // ===== 配置 PUT =====
+
+    @Test
+    void givenTwoConfigPuts_whenSecondPut_thenClientIdAndSecretByteIdentical() throws Exception {
+        // 核心回归（ADR-0005 痛点）：连续两次配置 PUT，client_id 与 client_secret 逐字节不变。
+        long appId = createApp("sso-app");
+        String[] cred = credentialsOnly(appId);
+        String clientId = cred[0];
+        String plaintext = cred[1];
+        String hashBefore = dbClientSecret(appId);
+
+        // 第一次配置 PUT
+        putConfig(appId, REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
+        String clientIdAfterFirst = dbClientId(appId);
+        String hashAfterFirst = dbClientSecret(appId);
+
+        // 第二次配置 PUT（换一份完全不同的配置）
+        List<String> otherUris = List.of("https://other.example.com/cb");
+        List<String> otherPostLogoutUris = List.of("https://other.example.com/logout");
+        putConfig(appId, otherUris, otherPostLogoutUris, Set.of("openid"), null);
+        String clientIdAfterSecond = dbClientId(appId);
+        String hashAfterSecond = dbClientSecret(appId);
+
+        // client_id + client_secret 两次 PUT 逐字节不变（核心回归）
+        assertThat(clientIdAfterFirst).isEqualTo(clientId);
+        assertThat(clientIdAfterSecond).isEqualTo(clientId);
+        assertThat(hashAfterFirst).isEqualTo(hashBefore);
+        assertThat(hashAfterSecond).isEqualTo(hashBefore);
+        // 凭证未换：hash 仍比对回原明文
+        assertThat(verifier().matches(plaintext, hashAfterSecond)).isTrue();
+        // 第二次 PUT 的配置确实落地（证明 PUT 生效、非空跑）
+        assertThat(jsonbElement("redirect_uris", appId, 0)).isEqualTo("https://other.example.com/cb");
+    }
+
+    @Test
+    void givenSsoClientWithCredentials_whenUpdateConfig_thenConfigAppliedAndCredentialsUntouched() throws Exception {
+        long appId = createApp("sso-app");
+        String[] cred = credentialsOnly(appId);
+        String clientId = cred[0];
+        String plaintext = cred[1];
+        String hashBefore = dbClientSecret(appId);
+
+        String body = mvc.perform(signedPutConfig(appId,
+                new UpdateSsoClientConfigCommand(REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS)))
+                .andExpect(status().isOk())
+                .andExpect(ApiTestAssertions.assertOk())
+                .andExpect(jsonPath("$.data.clientId").value(clientId))
+                .andExpect(jsonPath("$.data.redirectUris.length()").value(2))
+                .andExpect(jsonPath("$.data.postLogoutRedirectUris.length()").value(2))
+                .andExpect(jsonPath("$.data.scopes.length()").value(2))
+                .andExpect(jsonPath("$.data.grants.length()").value(2))
+                .andExpect(jsonPath("$.data.status").value(1))
+                .andExpect(jsonPath("$.data.clientSecret").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+
+        // 配置 PUT 不动凭证：client_id + client_secret 逐字节不变（GET 响应里无 clientSecret，DB 断言 hash）
+        assertThat(dbClientId(appId)).isEqualTo(clientId);
+        assertThat(dbClientSecret(appId)).isEqualTo(hashBefore);
+        assertThat(verifier().matches(plaintext, dbClientSecret(appId))).isTrue();
+        // 响应里无明文（配置接口不返 secret）
+        assertThat(objectMapper.readTree(body).path("data").has("clientSecret")).isFalse();
+    }
+
+    @Test
+    void givenNoSsoClient_whenUpdateConfig_then404() throws Exception {
+        // 配置 PUT 要求 SsoClient 已存在（client_id 已生成），不存在 → 404
+        long appId = createApp("sso-app");
+
+        mvc.perform(signedPutConfig(appId,
+                new UpdateSsoClientConfigCommand(REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS)))
+                .andExpect(status().isNotFound())
+                .andExpect(ApiTestAssertions.assertError(404));
+    }
+
+    @Test
+    void givenEmptyRedirectUris_whenUpdateConfig_then400() throws Exception {
+        long appId = createApp("sso-app");
+        createClient(appId);
+
+        mvc.perform(signedPutConfig(appId,
+                new UpdateSsoClientConfigCommand(List.of(), POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS)))
+                .andExpect(status().isBadRequest())
+                .andExpect(ApiTestAssertions.assertError(400));
+    }
+
+    @Test
+    void givenEmptyPostLogoutRedirectUris_whenUpdateConfig_then400() throws Exception {
+        // @NotEmpty 仅在配置接口生效（ADR-0005 不变式迁移）
+        long appId = createApp("sso-app");
+        createClient(appId);
+
+        mvc.perform(signedPutConfig(appId,
+                new UpdateSsoClientConfigCommand(REDIRECT_URIS, List.of(), SCOPES, GRANTS)))
+                .andExpect(status().isBadRequest())
+                .andExpect(ApiTestAssertions.assertError(400));
+    }
+
+    @Test
+    void givenMissingApp_whenUpdateConfig_then404() throws Exception {
+        mvc.perform(signedPutConfig(77777777777L,
+                new UpdateSsoClientConfigCommand(REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS)))
+                .andExpect(status().isNotFound())
+                .andExpect(ApiTestAssertions.assertError(404));
+    }
+
+    // ===== 旧 createOrRotate 路径已删除 =====
+
+    @Test
+    void givenOldCreateOrRotatePath_whenPostRoot_then4xx() throws Exception {
+        // 旧 POST 根路径（createOrRotate）已删除（ADR-0005 破坏性契约变更）→ POST 不再被接受 → 4xx。
+        long appId = createApp("sso-app");
+
+        mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId), null))
+                .andExpect(status().is4xxClientError());
+    }
+
+    // ===== GET / bootstrap / 启停（配置由 helper 补齐，断言配置在位）=====
 
     @Test
     void givenExistingSsoClient_whenGet_thenNoPlaintextSecret() throws Exception {
@@ -159,10 +303,7 @@ class SsoClientControllerTest extends ApiTestBase {
         String hash = data.path("clientSecretHash").asText();
         assertThat(hash).isNotEqualTo(plaintext);
         assertThat(hash).startsWith("$argon2");
-        String stored = jdbcTemplate.queryForObject(
-                "SELECT client_secret FROM ar_sso_clients WHERE app_id = ? AND deleted = false",
-                String.class, appId);
-        assertThat(hash).isEqualTo(stored);
+        assertThat(hash).isEqualTo(dbClientSecret(appId));
         // 响应里绝无明文字段
         assertThat(data.has("clientSecret")).isFalse();
     }
@@ -203,80 +344,6 @@ class SsoClientControllerTest extends ApiTestBase {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.active").value(false))
                 .andExpect(jsonPath("$.data.clientSecretHash").doesNotExist());
-    }
-
-    @Test
-    void givenExistingSsoClient_whenRotate_thenNewCredentialsAndMetadataAndOldClientIdGone() throws Exception {
-        long appId = createApp("sso-app");
-        String[] first = createClientWithSecret(appId);
-        String oldClientId = first[0];
-        String oldPlaintext = first[1];
-
-        List<String> newUris = List.of("https://new.example.com/cb");
-        List<String> newPostLogoutUris = List.of("https://new.example.com/logout");
-        CreateSsoClientCommand command = new CreateSsoClientCommand(newUris, newPostLogoutUris, Set.of("openid"), null);
-        String json = ApiTestAssertions.toJson(command);
-        String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json), json))
-                .andExpect(status().isOk())
-                .andExpect(ApiTestAssertions.assertOk())
-                .andReturn().getResponse().getContentAsString();
-        JsonNode data = objectMapper.readTree(body).path("data");
-        String newClientId = data.path("clientId").asText();
-        String newPlaintext = data.path("clientSecret").asText();
-
-        assertThat(newClientId).isNotEqualTo(oldClientId);
-        assertThat(newPlaintext).isNotEqualTo(oldPlaintext);
-        assertThat(data.path("redirectUris").size()).isEqualTo(1);
-        assertThat(data.path("postLogoutRedirectUris").size()).isEqualTo(1);
-        assertThat(data.path("grants").size()).isZero();
-
-        // 旧 client_id 已轮换掉 → bootstrap 404
-        mvc.perform(signer.sign(get("/api/app-registry/sso-clients/{clientId}", oldClientId), null))
-                .andExpect(status().isNotFound());
-
-        // 新 client_id 可用（active + hash 可比对新明文）
-        mvc.perform(signer.sign(get("/api/app-registry/sso-clients/{clientId}", newClientId), null))
-                .andExpect(jsonPath("$.data.active").value(true));
-    }
-
-    @Test
-    void givenEmptyRedirectUris_whenCreate_then400() throws Exception {
-        long appId = createApp("sso-app");
-
-        CreateSsoClientCommand command = new CreateSsoClientCommand(List.of(), POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
-        String json = ApiTestAssertions.toJson(command);
-        mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json), json))
-                .andExpect(status().isBadRequest())
-                .andExpect(ApiTestAssertions.assertError(400));
-    }
-
-    @Test
-    void givenEmptyPostLogoutRedirectUris_whenCreate_then400() throws Exception {
-        // 与 redirectUris 同款：post_logout_redirect_uris 至少一个（@NotEmpty → 400；ADR-0005）
-        long appId = createApp("sso-app");
-
-        CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, List.of(), SCOPES, GRANTS);
-        String json = ApiTestAssertions.toJson(command);
-        mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json), json))
-                .andExpect(status().isBadRequest())
-                .andExpect(ApiTestAssertions.assertError(400));
-    }
-
-    @Test
-    void givenMissingApp_whenCreate_then404() throws Exception {
-        CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
-        String json = ApiTestAssertions.toJson(command);
-        mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", 77777777777L)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json), json))
-                .andExpect(status().isNotFound())
-                .andExpect(ApiTestAssertions.assertError(404));
     }
 
     @Test
@@ -358,19 +425,66 @@ class SsoClientControllerTest extends ApiTestBase {
         return objectMapper.readTree(body).path("data").path("id").asLong();
     }
 
-    private String createClient(long appId) throws Exception {
-        return createClientWithSecret(appId)[0];
-    }
-
-    private String[] createClientWithSecret(long appId) throws Exception {
-        CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
-        String json = ApiTestAssertions.toJson(command);
-        String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json), json))
+    /** 调凭证接口建 client（不补配置），返回 [clientId, 明文 secret]。 */
+    private String[] credentialsOnly(long appId) throws Exception {
+        String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients/credentials", appId), null))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         JsonNode data = objectMapper.readTree(body).path("data");
         return new String[]{data.path("clientId").asText(), data.path("clientSecret").asText()};
+    }
+
+    /** 凭证接口建 client + 配置 PUT 补配置，返回 [clientId, 明文 secret]。供需「配置在位」的测试用。 */
+    private String[] createClientWithSecret(long appId) throws Exception {
+        String[] cred = credentialsOnly(appId);
+        putConfig(appId, REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
+        return cred;
+    }
+
+    private String createClient(long appId) throws Exception {
+        return createClientWithSecret(appId)[0];
+    }
+
+    private void putConfig(long appId, List<String> redirectUris, List<String> postLogoutRedirectUris,
+                           Set<String> scopes, Set<String> grants) throws Exception {
+        mvc.perform(signedPutConfig(appId,
+                new UpdateSsoClientConfigCommand(redirectUris, postLogoutRedirectUris, scopes, grants)))
+                .andExpect(status().isOk());
+    }
+
+    /** 构造已签名的配置 PUT 请求（json 既作 body 又参与签名摘要）。 */
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder signedPutConfig(
+            long appId, UpdateSsoClientConfigCommand command) throws Exception {
+        String json = ApiTestAssertions.toJson(command);
+        return signer.sign(put("/api/app-registry/apps/{appId}/sso-clients", appId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json), json);
+    }
+
+    private String dbClientId(long appId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT client_id FROM ar_sso_clients WHERE app_id = ? AND deleted = false", String.class, appId);
+    }
+
+    private String dbClientSecret(long appId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT client_secret FROM ar_sso_clients WHERE app_id = ? AND deleted = false", String.class, appId);
+    }
+
+    private int jsonbLength(String column, long appId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT jsonb_array_length(" + column + ") FROM ar_sso_clients WHERE app_id = ? AND deleted = false",
+                Integer.class, appId);
+    }
+
+    private String jsonbElement(String column, long appId, int index) {
+        // 索引按 int 绑定 → Postgres 选 jsonb ->> integer（数组下标），非 ->> text（对象键，数组上恒为 null）。
+        return jdbcTemplate.queryForObject(
+                "SELECT " + column + " ->> ? FROM ar_sso_clients WHERE app_id = ? AND deleted = false",
+                String.class, index, appId);
+    }
+
+    private static Argon2PasswordEncoder verifier() {
+        return Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8();
     }
 }

@@ -29,7 +29,7 @@ SsoClient 供 identity（IdP）OIDC：登记「哪些应用能走 SSO」+ 持其
 
 5. **前置假设（hash-only ⟹ `client_secret_post`）**：`client_secret` hash-only 排除 `client_secret_jwt`（需明文做 HMAC 验签），故隐含 `client_secret_post`。这不是 app-registry 的新选择，是不变式的推论；identity 建时自然落在 `client_secret_post`，两边统一于同一不变式。
 
-6. **`client_id` 用 SecureRandom 生成**；全局唯一（含软删行）；可完全轮换；撞名检测同 `app_code`/`api_key`（native query 先查 + `DomainException`，DB 唯一约束并发兜底 → 409）。
+6. **`client_id` 用 SecureRandom 生成**；全局唯一（含软删行）；~~可完全轮换~~ → **已修订（ADR-0005）为终身稳定**：创建时生成一次、不再轮换，轮换只换 `client_secret`。撞名检测同 `app_code`/`api_key`（native query 先查 + `DomainException`，DB 唯一约束并发兜底 → 409）。
 
 7. **不设 `client_secret_prev_hash`**：零停机轮换重叠先不做（YAGNI，与 ApiKey 一致）；留作未来。
 
@@ -37,7 +37,7 @@ SsoClient 供 identity（IdP）OIDC：登记「哪些应用能走 SSO」+ 持其
 
 9. **加固 = 网络隔离**（同 ApiKey，ADR-0002 §9）：SSO bootstrap 端点无验签，靠"只对内可达"加固，不做 token/mTLS。
 
-10. **字段集先按 OIDC 标准最小集**：`client_name` 复用 `RegisteredApp.name`（不单存）；`token_endpoint_auth_method`（默认 `client_secret_post`）/ token TTL 等先不留——identity 建时真需要再加列（greenfield 加列成本低）。
+10. **字段集先按 OIDC 标准最小集**：`client_name` 复用 `RegisteredApp.name`（不单存）；`token_endpoint_auth_method`（默认 `client_secret_post`）/ token TTL 等先不留——identity 建时真需要再加列（greenfield 加列成本低）。**已加首列（ADR-0005）：`post_logout_redirect_uris`**（identity RP-Initiated Logout 独立白名单）；同次重构把管理流拆为「凭证接口 + 配置 PUT」两个独立原语、`client_id` 改终身稳定。
 
 ## 结果（Consequences）
 

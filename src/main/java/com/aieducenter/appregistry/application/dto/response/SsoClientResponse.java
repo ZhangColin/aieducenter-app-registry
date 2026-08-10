@@ -7,8 +7,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * SsoClient 查询/禁用/启用响应——<strong>不含</strong> {@code client_secret}（明文仅创建/轮换时返一次，
- * 见 {@link SsoClientCreatedResponse}；hash 仅 bootstrap 端点按需返）。
+ * SsoClient 查询 / 配置 PUT / 禁用 / 启用响应——<strong>不含</strong> {@code client_secret}（明文仅凭证接口
+ * 返一次，见 {@link SsoClientCreatedResponse}；hash 仅 bootstrap 端点按需返）。
  *
  * @param id           SsoClient id
  * @param appId        所属应用 id

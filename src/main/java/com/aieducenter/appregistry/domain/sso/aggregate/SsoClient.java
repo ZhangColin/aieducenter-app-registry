@@ -24,18 +24,21 @@ import java.util.Set;
 /**
  * SsoClient 聚合根——OIDC client 元数据（供 identity IdP）。
  *
- * <p>1:1 挂在 {@code RegisteredApp} 上、可空。{@code client_id} = SecureRandom 生成、全局唯一、可完全轮换；
- * {@code client_secret} 以 <strong>argon2 hash</strong> 入库（hash-only，不可逆、永不返回明文）——
- * 与 ApiKey 的 AES-GCM 可逆密文存储<strong>相反</strong>（ADR-0003 §2）。明文 {@code client_secret} 仅由
- * 应用层在创建/轮换时生成、哈希、返响应一次。</p>
+ * <p>1:1 挂在 {@code RegisteredApp} 上、可空。{@code client_id} = SecureRandom 生成、全局唯一、<strong>终身稳定</strong>
+ * （创建时生成一次，不再轮换；ADR-0005 修订 ADR-0003 §6）；{@code client_secret} 以 <strong>argon2 hash</strong> 入库
+ * （hash-only，不可逆、永不返回明文）——与 ApiKey 的 AES-GCM 可逆密文存储<strong>相反</strong>（ADR-0003 §2）。
+ * 明文 {@code client_secret} 仅由应用层在创建/重置凭证时生成、哈希、返响应一次。</p>
  *
  * <p>{@code redirect_uris} / {@code post_logout_redirect_uris}（均列表、保序）/ {@code scopes}（去重）/
  * {@code grants}（去重）以 JSONB 列存储，应用不多、不建关联表（ADR-0003 §8）。</p>
  *
- * <h3>状态机</h3>
+ * <h3>职责分离操作模型（ADR-0005）</h3>
+ * <p>配置更新与凭证生成/重置是<strong>两个独立原语</strong>，调用端自由编排（服务不强制顺序）。四个操作正交、互不连带：</p>
  * <ul>
- *   <li>create → {@link SsoClientStatus#ACTIVE}；rotate → 重置 ACTIVE 并换新凭证 + 元数据。</li>
- *   <li>{@link #disable()} ACTIVE → DISABLED；{@link #enable()} DISABLED → ACTIVE。重复转换抛 409。</li>
+ *   <li>{@link #create(Long, String, String)} ——仅凭证：建聚合、置 ACTIVE；配置初始为空（允许「凭证已建、配置未 PUT」中间态）。</li>
+ *   <li>{@link #resetCredentials(String)} ——仅 {@code client_secret}：{@code client_id} 终身稳定、status 不变。</li>
+ *   <li>{@link #updateConfig(List, List, Set, Set)} ——仅配置：整份替换，两 URI 列表 {@code @NotEmpty}；不动凭证、不动 status。</li>
+ *   <li>{@link #disable()} / {@link #enable()} ——仅状态：重复转换抛 409。</li>
  * </ul>
  *
  * <h3>组合生效</h3>
@@ -93,68 +96,58 @@ public class SsoClient extends AuditableSoftDeletable implements AggregateRoot<S
     protected SsoClient() {
     }
 
-    private SsoClient(Long appId, String clientId, String hashedSecret,
-                      List<String> redirectUris, List<String> postLogoutRedirectUris,
-                      Set<String> scopes, Set<String> grants) {
+    private SsoClient(Long appId, String clientId, String hashedSecret) {
         this.id = TsidGenerator.newInstance().generate();
         this.appId = appId;
         this.clientId = clientId;
         this.clientSecret = hashedSecret;
-        this.redirectUris = new ArrayList<>(redirectUris);
-        this.postLogoutRedirectUris = new ArrayList<>(postLogoutRedirectUris);
-        this.scopes = new LinkedHashSet<>(scopes);
-        this.grants = new LinkedHashSet<>(grants);
+        // 配置初始为空——凭证接口不校验配置（ADR-0005：允许「凭证已建、配置未 PUT」中间态）。
         this.status = SsoClientStatus.ACTIVE;
     }
 
     /**
-     * 创建 SsoClient（工厂）。{@code client_id}/hash/元数据由应用层生成（SecureRandom + argon2）后传入。
+     * 创建 SsoClient（工厂，仅凭证）。{@code client_id}/hash 由应用层生成（SecureRandom + argon2）后传入；
+     * 配置初始为空，由 {@link #updateConfig} 单独编排。
      *
-     * @param appId         所属应用 id
-     * @param clientId      OIDC client_id（SecureRandom 生成）
-     * @param hashedSecret  client_secret 的 argon2 hash
-     * @param redirectUris  回调地址列表（至少一个）
-     * @param postLogoutRedirectUris 登出回跳白名单（至少一个，OIDC RP-Initiated Logout）
-     * @param scopes        授权范围（可空 → 空 set）
-     * @param grants        授权类型（可空 → 空 set）
-     * @return 新建的、尚未持久化的 SsoClient
+     * @param appId        所属应用 id
+     * @param clientId     OIDC client_id（SecureRandom 生成，终身稳定）
+     * @param hashedSecret client_secret 的 argon2 hash
+     * @return 新建的、尚未持久化的 SsoClient（ACTIVE、空配置）
      */
-    public static SsoClient create(Long appId, String clientId, String hashedSecret,
-                                   List<String> redirectUris, List<String> postLogoutRedirectUris,
-                                   Set<String> scopes, Set<String> grants) {
-        Assertions.require(redirectUris != null && !redirectUris.isEmpty(),
-                AppRegistryMessage.SSO_REDIRECT_URI_REQUIRED);
-        Assertions.require(postLogoutRedirectUris != null && !postLogoutRedirectUris.isEmpty(),
-                AppRegistryMessage.SSO_POST_LOGOUT_REDIRECT_URI_REQUIRED);
-        return new SsoClient(appId, clientId, hashedSecret, redirectUris, postLogoutRedirectUris,
-                scopes == null ? Set.of() : scopes, grants == null ? Set.of() : grants);
+    public static SsoClient create(Long appId, String clientId, String hashedSecret) {
+        // 入参由应用层生成（SecureRandom + argon2），按构造保证非空，无需领域断言。
+        return new SsoClient(appId, clientId, hashedSecret);
     }
 
     /**
-     * 轮换：换新 {@code client_id} + 新 hash + 新元数据，重置 ACTIVE（应用层先生成+哈希再传入）。
+     * 重置凭证：仅换 {@code client_secret} 的 hash。{@code client_id} 终身稳定（ADR-0005）、status 不变
+     * （凭证操作与启停正交——要复活已禁用 client 走 {@link #enable()}）。
      *
-     * @param newClientId     新 client_id
-     * @param newHashedSecret 新 client_secret 的 argon2 hash
-     * @param redirectUris    回调地址列表（至少一个）
-     * @param postLogoutRedirectUris 登出回跳白名单（至少一个，OIDC RP-Initiated Logout）
-     * @param scopes          授权范围（可空 → 空 set）
-     * @param grants          授权类型（可空 → 空 set）
+     * @param newHashedSecret 新 client_secret 的 argon2 hash（应用层先生成明文 + 哈希再传入）
      */
-    public void rotate(String newClientId, String newHashedSecret,
-                       List<String> redirectUris, List<String> postLogoutRedirectUris,
-                       Set<String> scopes, Set<String> grants) {
+    public void resetCredentials(String newHashedSecret) {
+        this.clientSecret = newHashedSecret;
+    }
+
+    /**
+     * 整份替换配置（{@code redirect_uris} / {@code post_logout_redirect_uris} / {@code scopes} / {@code grants}）。
+     * 两 URI 列表至少一个（{@code @NotEmpty}，OIDC 回调 + 登出回跳白名单）；<strong>不动凭证、不动 status</strong>。
+     *
+     * @param redirectUris         回调地址列表（至少一个）
+     * @param postLogoutRedirectUris 登出回跳白名单（至少一个，OIDC RP-Initiated Logout）
+     * @param scopes               授权范围（可空 → 空 set）
+     * @param grants               授权类型（可空 → 空 set）
+     */
+    public void updateConfig(List<String> redirectUris, List<String> postLogoutRedirectUris,
+                             Set<String> scopes, Set<String> grants) {
         Assertions.require(redirectUris != null && !redirectUris.isEmpty(),
                 AppRegistryMessage.SSO_REDIRECT_URI_REQUIRED);
         Assertions.require(postLogoutRedirectUris != null && !postLogoutRedirectUris.isEmpty(),
                 AppRegistryMessage.SSO_POST_LOGOUT_REDIRECT_URI_REQUIRED);
-        // 入参由应用层生成（SecureRandom + argon2），按构造保证非空，无需领域断言。
-        this.clientId = newClientId;
-        this.clientSecret = newHashedSecret;
         this.redirectUris = new ArrayList<>(redirectUris);
         this.postLogoutRedirectUris = new ArrayList<>(postLogoutRedirectUris);
         this.scopes = new LinkedHashSet<>(scopes == null ? Set.of() : scopes);
         this.grants = new LinkedHashSet<>(grants == null ? Set.of() : grants);
-        this.status = SsoClientStatus.ACTIVE;
     }
 
     /**

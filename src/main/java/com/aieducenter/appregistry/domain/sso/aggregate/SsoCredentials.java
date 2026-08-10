@@ -23,17 +23,28 @@ public final class SsoCredentials {
     }
 
     /**
-     * 生成一对新的凭证（client_id + 明文 client_secret）。
+     * 生成一对新凭证（client_id + 明文 client_secret）——创建 SsoClient 用：{@code client_id} 经撞名检查后入库，
+     * 明文 {@code client_secret} 由应用层哈希入库、仅在响应里返一次。
      *
      * @return 生成的凭证对
      */
     public static Generated generate() {
         byte[] clientIdBytes = new byte[BYTE_LENGTH];
-        byte[] secretBytes = new byte[BYTE_LENGTH];
         RANDOM.nextBytes(clientIdBytes);
+        String clientId = Base64.getUrlEncoder().withoutPadding().encodeToString(clientIdBytes);
+        return new Generated(clientId, generateSecret());
+    }
+
+    /**
+     * 仅生成明文 client_secret——重置凭证用：{@code client_id} 终身稳定、只换 secret（ADR-0005）。
+     * secret 经 argon2 哈希、永不按值查表，故无需撞名检测。
+     *
+     * @return 生成的明文 client_secret（待哈希）
+     */
+    public static String generateSecret() {
+        byte[] secretBytes = new byte[BYTE_LENGTH];
         RANDOM.nextBytes(secretBytes);
-        Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
-        return new Generated(encoder.encodeToString(clientIdBytes), encoder.encodeToString(secretBytes));
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(secretBytes);
     }
 
     /** 生成结果：client_id（OIDC 凭证标识）+ client_secret（明文，待哈希）。*/

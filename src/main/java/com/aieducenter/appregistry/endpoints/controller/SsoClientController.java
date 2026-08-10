@@ -1,7 +1,7 @@
 package com.aieducenter.appregistry.endpoints.controller;
 
 import com.aieducenter.appregistry.application.SsoClientAppService;
-import com.aieducenter.appregistry.application.dto.command.CreateSsoClientCommand;
+import com.aieducenter.appregistry.application.dto.command.UpdateSsoClientConfigCommand;
 import com.aieducenter.appregistry.application.dto.response.SsoClientCreatedResponse;
 import com.aieducenter.appregistry.application.dto.response.SsoClientResponse;
 import com.cartisan.openapi.annotation.RequireSignature;
@@ -18,7 +18,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * SsoClient 管理 REST API（挂在应用路径下，1:1）。
+ * SsoClient 管理 REST API（挂在应用路径下，1:1）。配置与凭证职责分离（ADR-0005）——两个独立原语，调用端自由编排：
+ * <ul>
+ *   <li>{@code POST .../sso-clients/credentials}：创建（无 SsoClient）/ 重置 {@code client_secret}（已存在，
+ *       {@code client_id} 终身稳定）；无请求体，响应一次性返明文 {@code client_secret}。</li>
+ *   <li>{@code PUT .../sso-clients}：整份替换配置（{@code redirect_uris} / {@code post_logout_redirect_uris} /
+ *       {@code scopes} / {@code grants}）；不动凭证、不动 status；SsoClient 不存在 → 404。</li>
+ * </ul>
  *
  * <p>加固说明：app-registry 只对内可达，网络边界即信任边界（ADR-0003 §9）。</p>
  *
@@ -36,11 +42,21 @@ public class SsoClientController {
         this.ssoClientAppService = ssoClientAppService;
     }
 
-    @PostMapping
-    @Operation(summary = "创建或轮换 SsoClient", description = "已有则轮换、否则新建；响应一次性返回明文 client_secret")
-    public ApiResponse<SsoClientCreatedResponse> createOrRotate(
-            @PathVariable Long appId, @Valid @RequestBody CreateSsoClientCommand command) {
-        return ApiResponse.ok(ssoClientAppService.createOrRotate(appId, command));
+    @PostMapping("/credentials")
+    @Operation(summary = "创建或重置 SsoClient 凭证",
+            description = "无 SsoClient 则创建（生成 client_id + client_secret），否则仅重置 client_secret（client_id 终身稳定）；"
+                    + "响应一次性返回明文 client_secret。无请求体、不校验配置。")
+    public ApiResponse<SsoClientCreatedResponse> credentials(@PathVariable Long appId) {
+        return ApiResponse.ok(ssoClientAppService.generateOrResetCredentials(appId));
+    }
+
+    @PutMapping
+    @Operation(summary = "更新 SsoClient 配置",
+            description = "整份替换 redirect_uris / post_logout_redirect_uris / scopes / grants；不动凭证、不动 status；"
+                    + "SsoClient 不存在返回 404。")
+    public ApiResponse<SsoClientResponse> updateConfig(
+            @PathVariable Long appId, @Valid @RequestBody UpdateSsoClientConfigCommand command) {
+        return ApiResponse.ok(ssoClientAppService.updateConfig(appId, command));
     }
 
     @GetMapping

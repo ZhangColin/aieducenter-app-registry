@@ -23,7 +23,7 @@ public interface SsoClientMapper extends DomainMapper<SsoClient, SsoClientRespon
     SsoClientResponse convert(SsoClient client);
 
     /**
-     * 创建/轮换响应：明文 {@code client_secret} 来自额外入参（不在实体上）。
+     * 凭证接口响应（创建 / 重置）：明文 {@code client_secret} 来自额外入参（不在实体上）。
      */
     @Mapping(target = "clientSecret", source = "plaintextSecret")
     @Mapping(target = "statusName", source = "client.status.name")
