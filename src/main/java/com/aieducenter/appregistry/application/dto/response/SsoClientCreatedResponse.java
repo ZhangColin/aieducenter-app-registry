@@ -17,6 +17,7 @@ import java.util.Set;
  * @param clientId      OIDC client_id
  * @param clientSecret  明文 secret（仅此一次返回）
  * @param redirectUris  回调地址列表
+ * @param postLogoutRedirectUris 登出回跳白名单（OIDC RP-Initiated Logout）
  * @param scopes        授权范围
  * @param grants        授权类型
  * @param status        凭证状态
@@ -32,6 +33,7 @@ public record SsoClientCreatedResponse(
         String clientId,
         String clientSecret,
         List<String> redirectUris,
+        List<String> postLogoutRedirectUris,
         Set<String> scopes,
         Set<String> grants,
         SsoClientStatus status,

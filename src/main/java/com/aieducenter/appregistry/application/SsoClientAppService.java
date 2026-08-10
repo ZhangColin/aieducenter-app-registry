@@ -68,10 +68,10 @@ public class SsoClientAppService {
         if (existing.isPresent()) {
             client = existing.get();
             client.rotate(generated.clientId(), hasher.hash(generated.clientSecret()),
-                    command.redirectUris(), command.scopes(), command.grants());
+                    command.redirectUris(), command.postLogoutRedirectUris(), command.scopes(), command.grants());
         } else {
             client = SsoClient.create(appId, generated.clientId(), hasher.hash(generated.clientSecret()),
-                    command.redirectUris(), command.scopes(), command.grants());
+                    command.redirectUris(), command.postLogoutRedirectUris(), command.scopes(), command.grants());
         }
         ssoClientRepository.saveAndFlush(client);
         return mapper.toCreated(client, generated.clientSecret());
@@ -128,7 +128,8 @@ public class SsoClientAppService {
                     && app.map(a -> a.getStatus() == RegisteredAppStatus.ACTIVE).orElse(false);
             String secretHash = active ? client.getClientSecret() : null;
             return new SsoClientInfo(client.getClientId(), client.getAppId(), clientName, secretHash,
-                    client.getRedirectUris(), client.getScopes(), client.getGrants(), active);
+                    client.getRedirectUris(), client.getPostLogoutRedirectUris(),
+                    client.getScopes(), client.getGrants(), active);
         });
     }
 

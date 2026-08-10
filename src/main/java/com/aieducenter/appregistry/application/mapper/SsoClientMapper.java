@@ -17,7 +17,7 @@ public interface SsoClientMapper extends DomainMapper<SsoClient, SsoClientRespon
 
     // status → status：BaseEnum 枚举自动映射（序列化为 Integer code）。
     // statusName ← status.getName()：MapStruct 不会自动调用 getName()，需显式配置。
-    // redirectUris / scopes / grants：同类型（List/Set<String>）自动映射。
+    // redirectUris / postLogoutRedirectUris / scopes / grants：同类型（List/Set<String>）自动映射。
     @Override
     @Mapping(target = "statusName", source = "status.name")
     SsoClientResponse convert(SsoClient client);

@@ -29,8 +29,8 @@ import java.util.Set;
  * 与 ApiKey 的 AES-GCM 可逆密文存储<strong>相反</strong>（ADR-0003 §2）。明文 {@code client_secret} 仅由
  * 应用层在创建/轮换时生成、哈希、返响应一次。</p>
  *
- * <p>{@code redirect_uris}（列表，保序）/ {@code scopes}（去重）/ {@code grants}（去重）以 JSONB 列存储，
- * 应用不多、不建关联表（ADR-0003 §8）。</p>
+ * <p>{@code redirect_uris} / {@code post_logout_redirect_uris}（均列表、保序）/ {@code scopes}（去重）/
+ * {@code grants}（去重）以 JSONB 列存储，应用不多、不建关联表（ADR-0003 §8）。</p>
  *
  * <h3>状态机</h3>
  * <ul>
@@ -72,6 +72,11 @@ public class SsoClient extends AuditableSoftDeletable implements AggregateRoot<S
     @Column(name = "redirect_uris", nullable = false)
     private List<String> redirectUris = new ArrayList<>();
 
+    /** OIDC RP-Initiated Logout 登出回跳白名单（保序、可重复，jsonb array）；与 redirect_uris 平级独立（ADR-0005）。*/
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "post_logout_redirect_uris", nullable = false)
+    private List<String> postLogoutRedirectUris = new ArrayList<>();
+
     /** 授权范围（去重，jsonb array）。*/
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "scopes", nullable = false)
@@ -89,12 +94,14 @@ public class SsoClient extends AuditableSoftDeletable implements AggregateRoot<S
     }
 
     private SsoClient(Long appId, String clientId, String hashedSecret,
-                      List<String> redirectUris, Set<String> scopes, Set<String> grants) {
+                      List<String> redirectUris, List<String> postLogoutRedirectUris,
+                      Set<String> scopes, Set<String> grants) {
         this.id = TsidGenerator.newInstance().generate();
         this.appId = appId;
         this.clientId = clientId;
         this.clientSecret = hashedSecret;
         this.redirectUris = new ArrayList<>(redirectUris);
+        this.postLogoutRedirectUris = new ArrayList<>(postLogoutRedirectUris);
         this.scopes = new LinkedHashSet<>(scopes);
         this.grants = new LinkedHashSet<>(grants);
         this.status = SsoClientStatus.ACTIVE;
@@ -107,15 +114,19 @@ public class SsoClient extends AuditableSoftDeletable implements AggregateRoot<S
      * @param clientId      OIDC client_id（SecureRandom 生成）
      * @param hashedSecret  client_secret 的 argon2 hash
      * @param redirectUris  回调地址列表（至少一个）
+     * @param postLogoutRedirectUris 登出回跳白名单（至少一个，OIDC RP-Initiated Logout）
      * @param scopes        授权范围（可空 → 空 set）
      * @param grants        授权类型（可空 → 空 set）
      * @return 新建的、尚未持久化的 SsoClient
      */
     public static SsoClient create(Long appId, String clientId, String hashedSecret,
-                                   List<String> redirectUris, Set<String> scopes, Set<String> grants) {
+                                   List<String> redirectUris, List<String> postLogoutRedirectUris,
+                                   Set<String> scopes, Set<String> grants) {
         Assertions.require(redirectUris != null && !redirectUris.isEmpty(),
                 AppRegistryMessage.SSO_REDIRECT_URI_REQUIRED);
-        return new SsoClient(appId, clientId, hashedSecret, redirectUris,
+        Assertions.require(postLogoutRedirectUris != null && !postLogoutRedirectUris.isEmpty(),
+                AppRegistryMessage.SSO_POST_LOGOUT_REDIRECT_URI_REQUIRED);
+        return new SsoClient(appId, clientId, hashedSecret, redirectUris, postLogoutRedirectUris,
                 scopes == null ? Set.of() : scopes, grants == null ? Set.of() : grants);
     }
 
@@ -125,17 +136,22 @@ public class SsoClient extends AuditableSoftDeletable implements AggregateRoot<S
      * @param newClientId     新 client_id
      * @param newHashedSecret 新 client_secret 的 argon2 hash
      * @param redirectUris    回调地址列表（至少一个）
+     * @param postLogoutRedirectUris 登出回跳白名单（至少一个，OIDC RP-Initiated Logout）
      * @param scopes          授权范围（可空 → 空 set）
      * @param grants          授权类型（可空 → 空 set）
      */
     public void rotate(String newClientId, String newHashedSecret,
-                       List<String> redirectUris, Set<String> scopes, Set<String> grants) {
+                       List<String> redirectUris, List<String> postLogoutRedirectUris,
+                       Set<String> scopes, Set<String> grants) {
         Assertions.require(redirectUris != null && !redirectUris.isEmpty(),
                 AppRegistryMessage.SSO_REDIRECT_URI_REQUIRED);
+        Assertions.require(postLogoutRedirectUris != null && !postLogoutRedirectUris.isEmpty(),
+                AppRegistryMessage.SSO_POST_LOGOUT_REDIRECT_URI_REQUIRED);
         // 入参由应用层生成（SecureRandom + argon2），按构造保证非空，无需领域断言。
         this.clientId = newClientId;
         this.clientSecret = newHashedSecret;
         this.redirectUris = new ArrayList<>(redirectUris);
+        this.postLogoutRedirectUris = new ArrayList<>(postLogoutRedirectUris);
         this.scopes = new LinkedHashSet<>(scopes == null ? Set.of() : scopes);
         this.grants = new LinkedHashSet<>(grants == null ? Set.of() : grants);
         this.status = SsoClientStatus.ACTIVE;

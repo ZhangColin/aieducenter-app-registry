@@ -45,6 +45,8 @@ public enum AppRegistryMessage implements CodeMessage {
     // ===== SsoClient（SSO 凭证聚合，#5）=====
     /** SSO 回调地址为空（至少一个 redirect_uri）。OIDC 标准字段 redirect_uris。*/
     SSO_REDIRECT_URI_REQUIRED(400, "AR_SSO_REDIRECT_URI_REQUIRED", "回调地址不能为空"),
+    /** SSO 登出回跳地址为空（至少一个 post_logout_redirect_uri）。OIDC RP-Initiated Logout 白名单（ADR-0005）。*/
+    SSO_POST_LOGOUT_REDIRECT_URI_REQUIRED(400, "AR_SSO_POST_LOGOUT_REDIRECT_URI_REQUIRED", "登出回跳地址不能为空"),
     /** SSO 凭证已禁用，无法再次禁用。*/
     SSO_CLIENT_ALREADY_DISABLED(409, "AR_SSO_CLIENT_ALREADY_DISABLED", "SSO 凭证已处于禁用状态"),
     /** SSO 凭证已启用，无法再次启用。*/

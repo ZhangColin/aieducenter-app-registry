@@ -48,6 +48,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class SsoClientControllerTest extends ApiTestBase {
 
     private static final List<String> REDIRECT_URIS = List.of("https://a.example.com/cb", "https://b.example.com/cb");
+    private static final List<String> POST_LOGOUT_REDIRECT_URIS =
+            List.of("https://a.example.com/logout", "https://b.example.com/logout");
     private static final Set<String> SCOPES = Set.of("openid", "profile");
     private static final Set<String> GRANTS = Set.of("authorization_code", "refresh_token");
 
@@ -73,7 +75,7 @@ class SsoClientControllerTest extends ApiTestBase {
     void givenAppWithoutSsoClient_whenCreate_thenReturnsPlaintextOnceAndStoresHash() throws Exception {
         long appId = createApp("sso-app");
 
-        CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, SCOPES, GRANTS);
+        CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
         String json = ApiTestAssertions.toJson(command);
         String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -85,6 +87,7 @@ class SsoClientControllerTest extends ApiTestBase {
                 .andExpect(jsonPath("$.data.clientId").isString())
                 .andExpect(jsonPath("$.data.clientSecret").isString())
                 .andExpect(jsonPath("$.data.redirectUris.length()").value(2))
+                .andExpect(jsonPath("$.data.postLogoutRedirectUris.length()").value(2))
                 .andExpect(jsonPath("$.data.scopes.length()").value(2))
                 .andExpect(jsonPath("$.data.grants.length()").value(2))
                 .andReturn().getResponse().getContentAsString();
@@ -105,11 +108,15 @@ class SsoClientControllerTest extends ApiTestBase {
         Argon2PasswordEncoder verifier = Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8();
         assertThat(verifier.matches(plaintextSecret, stored)).isTrue();
 
-        // JSON 列 DB 断言：jsonb 数组写入正确
+        // JSON 列 DB 断言：jsonb 数组写入正确（redirect_uris + post_logout_redirect_uris 保序存）
         Integer uriCount = jdbcTemplate.queryForObject(
                 "SELECT jsonb_array_length(redirect_uris) FROM ar_sso_clients WHERE app_id = ? AND deleted = false",
                 Integer.class, appId);
         assertThat(uriCount).isEqualTo(2);
+        Integer postLogoutCount = jdbcTemplate.queryForObject(
+                "SELECT jsonb_array_length(post_logout_redirect_uris) FROM ar_sso_clients WHERE app_id = ? AND deleted = false",
+                Integer.class, appId);
+        assertThat(postLogoutCount).isEqualTo(2);
     }
 
     @Test
@@ -123,6 +130,7 @@ class SsoClientControllerTest extends ApiTestBase {
                 .andExpect(jsonPath("$.data.clientId").value(clientId))
                 .andExpect(jsonPath("$.data.status").value(1))
                 .andExpect(jsonPath("$.data.redirectUris.length()").value(2))
+                .andExpect(jsonPath("$.data.postLogoutRedirectUris.length()").value(2))
                 .andExpect(jsonPath("$.data.clientSecret").doesNotExist());
     }
 
@@ -141,6 +149,7 @@ class SsoClientControllerTest extends ApiTestBase {
                 .andExpect(jsonPath("$.data.clientName").value("n"))
                 .andExpect(jsonPath("$.data.active").value(true))
                 .andExpect(jsonPath("$.data.redirectUris.length()").value(2))
+                .andExpect(jsonPath("$.data.postLogoutRedirectUris.length()").value(2))
                 .andExpect(jsonPath("$.data.scopes.length()").value(2))
                 .andExpect(jsonPath("$.data.grants.length()").value(2))
                 .andReturn().getResponse().getContentAsString();
@@ -204,7 +213,8 @@ class SsoClientControllerTest extends ApiTestBase {
         String oldPlaintext = first[1];
 
         List<String> newUris = List.of("https://new.example.com/cb");
-        CreateSsoClientCommand command = new CreateSsoClientCommand(newUris, Set.of("openid"), null);
+        List<String> newPostLogoutUris = List.of("https://new.example.com/logout");
+        CreateSsoClientCommand command = new CreateSsoClientCommand(newUris, newPostLogoutUris, Set.of("openid"), null);
         String json = ApiTestAssertions.toJson(command);
         String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -219,6 +229,7 @@ class SsoClientControllerTest extends ApiTestBase {
         assertThat(newClientId).isNotEqualTo(oldClientId);
         assertThat(newPlaintext).isNotEqualTo(oldPlaintext);
         assertThat(data.path("redirectUris").size()).isEqualTo(1);
+        assertThat(data.path("postLogoutRedirectUris").size()).isEqualTo(1);
         assertThat(data.path("grants").size()).isZero();
 
         // 旧 client_id 已轮换掉 → bootstrap 404
@@ -234,7 +245,21 @@ class SsoClientControllerTest extends ApiTestBase {
     void givenEmptyRedirectUris_whenCreate_then400() throws Exception {
         long appId = createApp("sso-app");
 
-        CreateSsoClientCommand command = new CreateSsoClientCommand(List.of(), SCOPES, GRANTS);
+        CreateSsoClientCommand command = new CreateSsoClientCommand(List.of(), POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
+        String json = ApiTestAssertions.toJson(command);
+        mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json), json))
+                .andExpect(status().isBadRequest())
+                .andExpect(ApiTestAssertions.assertError(400));
+    }
+
+    @Test
+    void givenEmptyPostLogoutRedirectUris_whenCreate_then400() throws Exception {
+        // 与 redirectUris 同款：post_logout_redirect_uris 至少一个（@NotEmpty → 400；ADR-0005）
+        long appId = createApp("sso-app");
+
+        CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, List.of(), SCOPES, GRANTS);
         String json = ApiTestAssertions.toJson(command);
         mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -245,7 +270,7 @@ class SsoClientControllerTest extends ApiTestBase {
 
     @Test
     void givenMissingApp_whenCreate_then404() throws Exception {
-        CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, SCOPES, GRANTS);
+        CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
         String json = ApiTestAssertions.toJson(command);
         mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", 77777777777L)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -338,7 +363,7 @@ class SsoClientControllerTest extends ApiTestBase {
     }
 
     private String[] createClientWithSecret(long appId) throws Exception {
-        CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, SCOPES, GRANTS);
+        CreateSsoClientCommand command = new CreateSsoClientCommand(REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
         String json = ApiTestAssertions.toJson(command);
         String body = mvc.perform(signer.sign(post("/api/app-registry/apps/{appId}/sso-clients", appId)
                         .contentType(MediaType.APPLICATION_JSON)

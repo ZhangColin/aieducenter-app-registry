@@ -18,6 +18,7 @@ import java.util.Set;
  * @param clientName      client 名（复用 RegisteredApp.name，不单存）
  * @param clientSecretHash client_secret 的 argon2 hash（仅 active 时返；否则 null）
  * @param redirectUris    回调地址列表
+ * @param postLogoutRedirectUris 登出回跳白名单（OIDC RP-Initiated Logout）
  * @param scopes          授权范围
  * @param grants          授权类型
  * @param active          组合生效 = client.active && app.active
@@ -30,6 +31,7 @@ public record SsoClientInfo(
         String clientName,
         String clientSecretHash,
         List<String> redirectUris,
+        List<String> postLogoutRedirectUris,
         Set<String> scopes,
         Set<String> grants,
         boolean active) {

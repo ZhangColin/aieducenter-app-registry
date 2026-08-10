@@ -20,18 +20,22 @@ class SsoClientTest {
 
     private static final long APP_ID = 1001L;
     private static final List<String> REDIRECT_URIS = List.of("https://a.example.com/cb", "https://b.example.com/cb");
+    private static final List<String> POST_LOGOUT_REDIRECT_URIS =
+            List.of("https://a.example.com/logout", "https://b.example.com/logout");
     private static final Set<String> SCOPES = Set.of("openid", "profile");
     private static final Set<String> GRANTS = Set.of("authorization_code");
 
     @Test
     void givenValidInput_whenCreate_thenActiveWithIdAndFields() {
-        SsoClient client = SsoClient.create(APP_ID, "cid_abc", "hash_xyz", REDIRECT_URIS, SCOPES, GRANTS);
+        SsoClient client = SsoClient.create(APP_ID, "cid_abc", "hash_xyz",
+                REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
 
         assertThat(client.getId()).isNotNull();
         assertThat(client.getAppId()).isEqualTo(APP_ID);
         assertThat(client.getClientId()).isEqualTo("cid_abc");
         assertThat(client.getClientSecret()).isEqualTo("hash_xyz");
         assertThat(client.getRedirectUris()).containsExactlyElementsOf(REDIRECT_URIS);
+        assertThat(client.getPostLogoutRedirectUris()).containsExactlyElementsOf(POST_LOGOUT_REDIRECT_URIS);
         assertThat(client.getScopes()).containsExactlyInAnyOrderElementsOf(SCOPES);
         assertThat(client.getGrants()).containsExactlyInAnyOrderElementsOf(GRANTS);
         assertThat(client.getStatus()).isEqualTo(SsoClientStatus.ACTIVE);
@@ -39,7 +43,8 @@ class SsoClientTest {
 
     @Test
     void givenNullScopesAndGrants_whenCreate_thenEmptySetsNotNull() {
-        SsoClient client = SsoClient.create(APP_ID, "cid_abc", "hash_xyz", REDIRECT_URIS, null, null);
+        SsoClient client = SsoClient.create(APP_ID, "cid_abc", "hash_xyz",
+                REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, null, null);
 
         assertThat(client.getScopes()).isEmpty();
         assertThat(client.getGrants()).isEmpty();
@@ -47,7 +52,8 @@ class SsoClientTest {
 
     @Test
     void givenEmptyRedirectUris_whenCreate_thenThrowsRequired() {
-        assertThatThrownBy(() -> SsoClient.create(APP_ID, "cid_abc", "hash_xyz", List.of(), SCOPES, GRANTS))
+        assertThatThrownBy(() -> SsoClient.create(APP_ID, "cid_abc", "hash_xyz",
+                List.of(), POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS))
                 .isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getCodeMessage())
                 .isEqualTo(AppRegistryMessage.SSO_REDIRECT_URI_REQUIRED);
@@ -55,32 +61,68 @@ class SsoClientTest {
 
     @Test
     void givenNullRedirectUris_whenCreate_thenThrowsRequired() {
-        assertThatThrownBy(() -> SsoClient.create(APP_ID, "cid_abc", "hash_xyz", null, SCOPES, GRANTS))
+        assertThatThrownBy(() -> SsoClient.create(APP_ID, "cid_abc", "hash_xyz",
+                null, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS))
                 .isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getCodeMessage())
                 .isEqualTo(AppRegistryMessage.SSO_REDIRECT_URI_REQUIRED);
     }
 
     @Test
+    void givenEmptyPostLogoutRedirectUris_whenCreate_thenThrowsRequired() {
+        // 与 redirect_uris 同款：登出回跳白名单至少一个（ADR-0005）
+        assertThatThrownBy(() -> SsoClient.create(APP_ID, "cid_abc", "hash_xyz",
+                REDIRECT_URIS, List.of(), SCOPES, GRANTS))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getCodeMessage())
+                .isEqualTo(AppRegistryMessage.SSO_POST_LOGOUT_REDIRECT_URI_REQUIRED);
+    }
+
+    @Test
+    void givenNullPostLogoutRedirectUris_whenCreate_thenThrowsRequired() {
+        assertThatThrownBy(() -> SsoClient.create(APP_ID, "cid_abc", "hash_xyz",
+                REDIRECT_URIS, null, SCOPES, GRANTS))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getCodeMessage())
+                .isEqualTo(AppRegistryMessage.SSO_POST_LOGOUT_REDIRECT_URI_REQUIRED);
+    }
+
+    @Test
     void givenExistingClient_whenRotate_thenCredentialsAndMetadataChangeAndStatusActive() {
-        SsoClient client = SsoClient.create(APP_ID, "cid_old", "hash_old", REDIRECT_URIS, SCOPES, GRANTS);
+        SsoClient client = SsoClient.create(APP_ID, "cid_old", "hash_old",
+                REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
         client.disable();
 
         List<String> newUris = List.of("https://new.example.com/cb");
+        List<String> newPostLogoutUris = List.of("https://new.example.com/logout");
         Set<String> newScopes = Set.of("openid");
-        client.rotate("cid_new", "hash_new", newUris, newScopes, null);
+        client.rotate("cid_new", "hash_new", newUris, newPostLogoutUris, newScopes, null);
 
         assertThat(client.getClientId()).isEqualTo("cid_new");
         assertThat(client.getClientSecret()).isEqualTo("hash_new");
         assertThat(client.getRedirectUris()).containsExactlyElementsOf(newUris);
+        assertThat(client.getPostLogoutRedirectUris()).containsExactlyElementsOf(newPostLogoutUris);
         assertThat(client.getScopes()).containsExactlyInAnyOrderElementsOf(newScopes);
         assertThat(client.getGrants()).isEmpty();
         assertThat(client.getStatus()).isEqualTo(SsoClientStatus.ACTIVE);
     }
 
     @Test
+    void givenEmptyPostLogoutRedirectUris_whenRotate_thenThrowsRequired() {
+        SsoClient client = SsoClient.create(APP_ID, "cid_old", "hash_old",
+                REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
+
+        assertThatThrownBy(() -> client.rotate("cid_new", "hash_new",
+                REDIRECT_URIS, List.of(), SCOPES, GRANTS))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getCodeMessage())
+                .isEqualTo(AppRegistryMessage.SSO_POST_LOGOUT_REDIRECT_URI_REQUIRED);
+    }
+
+    @Test
     void givenActiveClient_whenDisable_thenDisabled() {
-        SsoClient client = SsoClient.create(APP_ID, "cid", "hash", REDIRECT_URIS, SCOPES, GRANTS);
+        SsoClient client = SsoClient.create(APP_ID, "cid", "hash",
+                REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
 
         client.disable();
 
@@ -89,7 +131,8 @@ class SsoClientTest {
 
     @Test
     void givenDisabledClient_whenDisable_thenThrowsAlreadyDisabled() {
-        SsoClient client = SsoClient.create(APP_ID, "cid", "hash", REDIRECT_URIS, SCOPES, GRANTS);
+        SsoClient client = SsoClient.create(APP_ID, "cid", "hash",
+                REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
         client.disable();
 
         assertThatThrownBy(client::disable)
@@ -100,7 +143,8 @@ class SsoClientTest {
 
     @Test
     void givenDisabledClient_whenEnable_thenActive() {
-        SsoClient client = SsoClient.create(APP_ID, "cid", "hash", REDIRECT_URIS, SCOPES, GRANTS);
+        SsoClient client = SsoClient.create(APP_ID, "cid", "hash",
+                REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
         client.disable();
 
         client.enable();
@@ -110,7 +154,8 @@ class SsoClientTest {
 
     @Test
     void givenActiveClient_whenEnable_thenThrowsAlreadyEnabled() {
-        SsoClient client = SsoClient.create(APP_ID, "cid", "hash", REDIRECT_URIS, SCOPES, GRANTS);
+        SsoClient client = SsoClient.create(APP_ID, "cid", "hash",
+                REDIRECT_URIS, POST_LOGOUT_REDIRECT_URIS, SCOPES, GRANTS);
 
         assertThatThrownBy(client::enable)
                 .isInstanceOf(DomainException.class)
