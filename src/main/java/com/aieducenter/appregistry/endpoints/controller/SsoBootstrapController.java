@@ -20,8 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code client_secret} 的 <strong>hash</strong>（不含明文，hash-only 不变式）；app/client 任一禁用 →
  * {@code active=false} 且 hash=null（不返有效元数据）。</p>
  *
- * <p><strong>加固 = 网络隔离（只对内可达）</strong>：本端点无验签、无 bootstrap token / mTLS / IP allowlist——
- * app-registry 部署为只对内可达，网络边界即信任边界（ADR-0003 §9）。唯一调用方是可信的 identity 服务。</p>
+ * <p><strong>加固 = 网络隔离（只对内可达）</strong>：在 {@code @RequireSignature} 验签之外，不再叠 bootstrap token /
+ * mTLS / IP allowlist——app-registry 部署为只对内可达，网络边界即信任边界（ADR-0003 §9）。唯一调用方是可信的 identity 服务。</p>
  *
  * <p>与 ApiKey {@code /api-keys/{apiKey}} 对称：拉取 + 缓存 + 本地验证；差异仅"返 hash 不返明文"。</p>
  *

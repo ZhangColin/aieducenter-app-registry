@@ -9,7 +9,7 @@
 SsoClient 供 identity（IdP）OIDC：登记「哪些应用能走 SSO」+ 持其 client 元数据。服务从 `aieducenter-openapi` 升级为 `app-registry` 的驱动原因即此。
 
 约束：
-- 架构不变式：`client_secret` 必须 **hash-only**（像密码，IdP 本地比对、永不返回明文）；与 `apiSecret`（可取回）**存储相反**；SSO 走独立端点、identity 直接消费；`ApiKeyInfo`/`ApiKeyProvider` 绝不服务 SSO；bootstrap 端点无验签、必须加固；本服务不做 OIDC token 签发/登录流。
+- 架构不变式：`client_secret` 必须 **hash-only**（像密码，IdP 本地比对、永不返回明文）；与 `apiSecret`（可取回）**存储相反**；SSO 走独立端点、identity 直接消费；`ApiKeyInfo`/`ApiKeyProvider` 绝不服务 SSO；SSO bootstrap 端点需验签（`@RequireSignature`）、必须加固；本服务不做 OIDC token 签发/登录流。
 - 安全约束（用户）：暂不引入 KMS/Vault；不过度设计。
 - 边界声明（用户）：**所有 SSO 职责归 identity，app-registry 只提供数据**。
 - 现状：identity 尚未建，在等 app-registry 落库 + 提供获取端点；app-registry 先行。
@@ -35,7 +35,7 @@ SsoClient 供 identity（IdP）OIDC：登记「哪些应用能走 SSO」+ 持其
 
 8. **列表/Set 用 JSONB 列**（`redirect_uris` / `scopes` / `grants`）：应用不多，不建关联表。
 
-9. **加固 = 网络隔离**（同 ApiKey，ADR-0002 §9）：SSO bootstrap 端点无验签，靠"只对内可达"加固，不做 token/mTLS。
+9. **加固 = 验签 + 网络隔离**（`@RequireSignature`）：与 ApiKey bootstrap 的 `@NoSignature` 逃生舱相反，SSO bootstrap 端点**需验签**——identity 作为平台核心服务可预先持有签名凭证、无死锁；另靠"只对内可达"加固，不做 bootstrap token / mTLS。
 
 10. **字段集先按 OIDC 标准最小集**：`client_name` 复用 `RegisteredApp.name`（不单存）；`token_endpoint_auth_method`（默认 `client_secret_post`）/ token TTL 等先不留——identity 建时真需要再加列（greenfield 加列成本低）。**已加首列（ADR-0005）：`post_logout_redirect_uris`**（identity RP-Initiated Logout 独立白名单）；同次重构把管理流拆为「凭证接口 + 配置 PUT」两个独立原语、`client_id` 改终身稳定。
 
