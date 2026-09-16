@@ -174,22 +174,84 @@ class AppControllerTest extends ApiTestBase {
     // ---- list (paginated) ----
 
     @Test
-    void givenMultipleApps_whenList_thenReturnPagedContent() throws Exception {
-        int baseline = countApps(); // 含 seed（identity）与签名 caller——让 total 断言对 seed 行免疫
-        createApp("svc-a");
-        createApp("svc-b");
-        createApp("svc-c");
+    void givenMultipleApps_whenListPaged_then1BasedTwoPageTraversal() throws Exception {
+        // keyword 隔离本用例的行（seed 与签名 caller 不含 "page-svc"），total 断言精确到 3
+        createApp("page-svc-a");
+        createApp("page-svc-b");
+        createApp("page-svc-c");
 
+        // wire page=1（1-based，#24 起）取第一页 2 项 / total=3 / 回显 page=1
         mvc.perform(signer.sign(get("/api/app-registry/apps")
-                        .param("page", "0")
+                        .param("keyword", "page-svc")
+                        .param("page", "1")
                         .param("size", "2"), null))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(3))
                 .andExpect(jsonPath("$.items.length()").value(2))
-                .andExpect(jsonPath("$.total").value(baseline + 3))
                 .andExpect(jsonPath("$.page").value(1))
                 .andExpect(jsonPath("$.size").value(2))
                 .andExpect(jsonPath("$.items[0].appCode").isNotEmpty())
                 .andExpect(jsonPath("$.items[0].apiSecret").doesNotExist());
+
+        // wire page=2 取第二页 1 项 / 回显 page=2
+        mvc.perform(signer.sign(get("/api/app-registry/apps")
+                        .param("keyword", "page-svc")
+                        .param("page", "2")
+                        .param("size", "2"), null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(3))
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.page").value(2));
+
+        // 框架 clamp（#24）：wire page=0（旧 0-based 调用方的"第一页"）静默贴边为 page=1 → 回第一页、回显 1
+        mvc.perform(signer.sign(get("/api/app-registry/apps")
+                        .param("keyword", "page-svc")
+                        .param("page", "0")
+                        .param("size", "2"), null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.page").value(1));
+    }
+
+    @Test
+    void givenSizeOverLimit_whenList_thenClampedTo100() throws Exception {
+        // 框架 clamp（#24）：size 上限 100，越界静默贴边 → 回显 100
+        mvc.perform(signer.sign(get("/api/app-registry/apps")
+                        .param("size", "500"), null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.size").value(100));
+    }
+
+    @Test
+    void givenNoSortParam_whenList_thenDefaultsToCreatedAtDesc() throws Exception {
+        // 默认排序契约（admin BFF 不传 sort）：createdAt 降序（最新登记在前）。
+        // createdAt 由审计填充、连续创建可能同毫秒，故显式把先建的应用拨早一天，消除时序巧合。
+        createApp("sort-older");
+        createApp("sort-newer");
+        jdbcTemplate.update(
+                "UPDATE ar_registered_apps SET created_at = now() - interval '1 day' WHERE app_code = ?",
+                "sort-older");
+
+        mvc.perform(signer.sign(get("/api/app-registry/apps")
+                        .param("keyword", "sort-"), null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(2))
+                .andExpect(jsonPath("$.items[0].appCode").value("sort-newer"))
+                .andExpect(jsonPath("$.items[1].appCode").value("sort-older"));
+    }
+
+    @Test
+    void givenPageOutOfBounds_whenList_thenEmptyPage200() throws Exception {
+        int baseline = countApps(); // 含 seed 与签名 caller
+
+        // 分页越界（取第 99 页）→ 空页（items=[]、total 不变），200 不报错，请求页码原样回显（1-based 99）
+        mvc.perform(signer.sign(get("/api/app-registry/apps")
+                        .param("page", "99")
+                        .param("size", "2"), null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(baseline))
+                .andExpect(jsonPath("$.items.length()").value(0))
+                .andExpect(jsonPath("$.page").value(99));
     }
 
     @Test

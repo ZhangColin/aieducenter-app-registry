@@ -6,13 +6,13 @@ import com.aieducenter.appregistry.application.dto.command.UpdateAppCommand;
 import com.aieducenter.appregistry.application.dto.query.AppQuery;
 import com.aieducenter.appregistry.application.dto.response.AppResponse;
 import com.cartisan.openapi.annotation.RequireSignature;
+import com.cartisan.web.doc.ErrorCodes;
+import com.cartisan.web.request.Pagination;
 import com.cartisan.web.response.ApiResponse;
 import com.cartisan.web.response.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -56,10 +56,13 @@ public class AppController {
     }
 
     @GetMapping
-    @Operation(summary = "分页查询应用列表")
-    public PageResponse<AppResponse> list(AppQuery query,
-                                          @PageableDefault(size = 20) Pageable pageable) {
-        return appService.list(query, pageable);
+    @Operation(summary = "分页查询应用列表",
+            description = "分页走框架 Pagination 契约（#24 起全链 1-based）：page 默认 1、size 默认 20"
+                    + "（上限 100，越界静默贴边），sort 多值 token（如 sort=createdAt,desc）；不传 sort 默认 createdAt 降序。"
+                    + "请求页超出尾页 → 空页（200，请求页码原样回显）。无业务错误码（空页不报错；仅基建错可中断）。")
+    @ErrorCodes("INTERNAL_SERVER_ERROR")
+    public PageResponse<AppResponse> list(AppQuery query, Pagination pagination) {
+        return appService.list(query, pagination);
     }
 
     @PutMapping("/{id}/disable")

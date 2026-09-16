@@ -12,9 +12,11 @@ import com.cartisan.core.exception.BaseCodeMessage;
 import com.cartisan.core.exception.DomainException;
 import com.cartisan.core.util.Assertions;
 import com.cartisan.data.jpa.specification.ConditionSpecifications;
+import com.cartisan.web.request.Pagination;
 import com.cartisan.web.response.PageResponse;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +30,9 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class RegisteredAppAppService {
+
+    /** 列表默认排序（不传 sort 时）：createdAt 降序——分页无 ORDER BY 窗口不稳定，admin BFF 不传 sort 依赖此默认。 */
+    private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
 
     private final RegisteredAppRepository appRepository;
     private final RegisteredAppMapper appMapper;
@@ -99,16 +104,22 @@ public class RegisteredAppAppService {
 
     /**
      * 分页查询应用列表。支持 keyword（appCode + name 模糊）和 status 筛选。
+     *
+     * <p>分页走框架 {@link Pagination} 契约（#24 起全链 1-based）：wire page/size/sort 由框架绑定 +
+     * clamp（page≥1、size∈[1,100] 默认 20），本方法零页码算术；<b>不传 sort 时默认 createdAt 降序</b>
+     *（分页无 ORDER BY 窗口不稳定，且 admin BFF 不传 sort 依赖此默认）。
+     * 回显经 {@link PageResponse#of(Page)} 集中做 1-based（替代原手写 {@code +1}）。
+     * 请求页超出尾页 → 空页（200，请求页码原样回显）。</p>
      */
     @Transactional(readOnly = true)
-    public PageResponse<AppResponse> list(AppQuery query, Pageable pageable) {
+    public PageResponse<AppResponse> list(AppQuery query, Pagination pagination) {
+        PageRequest pageRequest = pagination.toPageRequest();
+        if (pageRequest.getSort().isUnsorted()) {
+            pageRequest = PageRequest.of(pageRequest.getPageNumber(), pageRequest.getPageSize(), DEFAULT_SORT);
+        }
         Page<RegisteredApp> page = appRepository.findAll(
-                ConditionSpecifications.fromAnnotation(query), pageable);
-        return new PageResponse<>(
-                page.map(appMapper::convert).getContent(),
-                page.getTotalElements(),
-                pageable.getPageNumber() + 1,
-                pageable.getPageSize());
+                ConditionSpecifications.fromAnnotation(query), pageRequest);
+        return PageResponse.of(page.map(appMapper::convert));
     }
 
     private RegisteredApp loadApp(Long id) {
